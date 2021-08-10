@@ -1,0 +1,20 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary files
+*.swp
+*~
+
+# IDE configuration
+.idea/
+.vscode/
+
+# Project-specific ignores
+/build/
+/dist/
+*.egg-info/
+.eggs/
+*.so
+/tests/data/*.braw

@@ -1,0 +1,7 @@
+name: pybraw
+dependencies:
+  - pip=21.2.2
+  - python=3.7.6
+  - pybind11=2.7.0
+  - numpy=1.20.3
+  - pytest=6.2.4

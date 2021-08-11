@@ -17,6 +17,9 @@ and copy `libBlackmagicRawAPI.so` into your system library path. For example:
 sudo cp libBlackmagicRawAPI.so /usr/lib/
 ```
 
+You may also need other libraries depending on your requirements. For example, `libDecoderCUDA.so`
+is required for CUDA GPU decoding.
+
 Set up and activate a Conda environment with all required Python packages:
 
 ```shell

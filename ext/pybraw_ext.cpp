@@ -154,6 +154,20 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawPipeline>(m, "_BlackmagicRawPipeline")
+        .value("blackmagicRawPipelineCPU", blackmagicRawPipelineCPU)
+        .value("blackmagicRawPipelineCUDA", blackmagicRawPipelineCUDA)
+        .value("blackmagicRawPipelineMetal", blackmagicRawPipelineMetal)
+        .value("blackmagicRawPipelineOpenCL", blackmagicRawPipelineOpenCL)
+        .export_values()
+    ;
+
+    py::enum_<_BlackmagicRawInterop>(m, "_BlackmagicRawInterop")
+        .value("blackmagicRawInteropNone", blackmagicRawInteropNone)
+        .value("blackmagicRawInteropOpenGL", blackmagicRawInteropOpenGL)
+        .export_values()
+    ;
+
     py::class_<SafeArrayBound>(m, "SafeArrayBound")
         .def_readwrite("lLbound", &SafeArrayBound::lLbound)
         .def_readwrite("cElements", &SafeArrayBound::cElements)
@@ -386,11 +400,36 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("FlushJobs", &IBlackmagicRaw::FlushJobs, py::call_guard<py::gil_scoped_release>())
     ;
 
+    py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,py::nodelete>>(m, "IBlackmagicRawPipelineIterator")
+        .def("Next", &IBlackmagicRawPipelineIterator::Next)
+        .def("GetName", [](IBlackmagicRawPipelineIterator& self) {
+            const char* pipelineName = nullptr;
+            HRESULT result = self.GetName(&pipelineName);
+            return std::make_tuple(result, pipelineName);
+        })
+        .def("GetInterop", [](IBlackmagicRawPipelineIterator& self) {
+            BlackmagicRawInterop interop = 0;
+            HRESULT result = self.GetInterop(&interop);
+            return std::make_tuple(result, interop);
+        })
+        .def("GetPipeline", [](IBlackmagicRawPipelineIterator& self) {
+            BlackmagicRawPipeline pipeline = 0;
+            HRESULT result = self.GetPipeline(&pipeline);
+            return std::make_tuple(result, pipeline);
+        })
+    ;
+
     py::class_<IBlackmagicRawFactory,IUnknown,std::unique_ptr<IBlackmagicRawFactory,py::nodelete>>(m, "IBlackmagicRawFactory")
         .def("CreateCodec", [](IBlackmagicRawFactory& self) {
             IBlackmagicRaw* codec = nullptr;
             HRESULT result = self.CreateCodec(&codec);
             return std::make_tuple(result, codec);
         })
+        .def("CreatePipelineIterator", [](IBlackmagicRawFactory& self, BlackmagicRawInterop interop) {
+            IBlackmagicRawPipelineIterator* pipelineIterator = nullptr;
+            HRESULT result = self.CreatePipelineIterator(interop, &pipelineIterator);
+            return std::make_tuple(result, pipelineIterator);
+        })
+        // ...
     ;
 }

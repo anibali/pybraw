@@ -17,6 +17,46 @@ def test_CreateBlackmagicRawFactoryInstance():
     factory.Release()
 
 
+class TestIBlackmagicRawPipelineIterator:
+    @pytest.fixture
+    def factory(self):
+        factory = _pybraw.CreateBlackmagicRawFactoryInstance()
+        yield factory
+        factory.Release()
+
+    @pytest.fixture
+    def pipeline_iterator(self, factory):
+        pipeline_iterator = checked_result(factory.CreatePipelineIterator(_pybraw.blackmagicRawInteropNone))
+        yield pipeline_iterator
+        pipeline_iterator.Release()
+
+    def test_GetName(self, pipeline_iterator):
+        pipeline_names = []
+        while True:
+            result, pipeline_name = pipeline_iterator.GetName()
+            if result == _pybraw.E_FAIL:
+                break
+            assert result == _pybraw.S_OK
+            pipeline_names.append(pipeline_name)
+            pipeline_iterator.Next()
+        assert 'CPU' in pipeline_names
+
+    def test_GetInterop(self, pipeline_iterator):
+        interop = checked_result(pipeline_iterator.GetInterop())
+        assert interop == _pybraw.blackmagicRawInteropNone
+
+    def test_GetPipeline(self, pipeline_iterator):
+        pipelines = []
+        while True:
+            result, pipeline = pipeline_iterator.GetPipeline()
+            if result == _pybraw.E_FAIL:
+                break
+            assert result == _pybraw.S_OK
+            pipelines.append(pipeline)
+            pipeline_iterator.Next()
+        assert _pybraw.blackmagicRawPipelineCPU in pipelines
+
+
 class TestIBlackmagicRawClip:
     @pytest.fixture
     def factory(self):
@@ -61,9 +101,9 @@ class TestIBlackmagicRawClip:
         metadata = {}
         while True:
             result, key = iterator.GetKey()
-            if result != _pybraw.S_OK:
-                assert result == _pybraw.E_FAIL
+            if result == _pybraw.E_FAIL:
                 break
+            assert result == _pybraw.S_OK
             data = checked_result(iterator.GetData())
             metadata[key] = data
             result = iterator.Next()
@@ -82,9 +122,9 @@ class TestIBlackmagicRawClip:
         metadata = {}
         while True:
             result, key = iterator.GetKey()
-            if result != _pybraw.S_OK:
-                assert result == _pybraw.E_FAIL
+            if result == _pybraw.E_FAIL:
                 break
+            assert result == _pybraw.S_OK
             data = checked_result(iterator.GetData())
             metadata[key] = data.to_py()
             # We expect the data to be copied when calling to_py(), so it should be safe to clear

@@ -40,6 +40,15 @@ def codec(factory):
 
 
 @pytest.fixture
+def configuration(codec):
+    configuration = checked_result(codec.as_IBlackmagicRawConfiguration())
+    yield configuration
+    # Since `codec` has not been released and the `configuration` shares its data, we expect
+    # the ref count after release to be 1.
+    assert configuration.Release() == 1
+
+
+@pytest.fixture
 def clip(codec, sample_filename):
     clip = checked_result(codec.OpenClip(sample_filename))
     yield clip

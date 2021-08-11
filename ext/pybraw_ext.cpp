@@ -8,6 +8,14 @@
 namespace py = pybind11;
 
 
+#define DEF_QUERY_INTERFACE(S, T)\
+.def("as_"#T, [](S& self) {\
+    LPVOID pv = nullptr;\
+    HRESULT result = self.QueryInterface(IID_##T, &pv);\
+    return std::make_tuple(result, (T*)pv);\
+})
+
+
 // Concrete subclass of IBlackmagicRawCallback which provides an implementation of reference
 // counting and placeholders for each of the callback functions.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
@@ -402,6 +410,27 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
+    py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,py::nodelete>>(m, "IBlackmagicRawConfiguration")
+        // TODO: Add missing bindings
+        .def("SetCPUThreads", &IBlackmagicRawConfiguration::SetCPUThreads)
+        .def("GetCPUThreads", [](IBlackmagicRawConfiguration& self) {
+            uint32_t threadCount = 0;
+            HRESULT result = self.GetCPUThreads(&threadCount);
+            return std::make_tuple(result, threadCount);
+        })
+        .def("GetMaxCPUThreadCount", [](IBlackmagicRawConfiguration& self) {
+            uint32_t threadCount = 0;
+            HRESULT result = self.GetMaxCPUThreadCount(&threadCount);
+            return std::make_tuple(result, threadCount);
+        })
+        // TODO: Add missing bindings
+        .def("SetFromDevice", &IBlackmagicRawConfiguration::SetFromDevice)
+    ;
+
+    py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,py::nodelete>>(m, "IBlackmagicRawConfigurationEx")
+        // TODO: Add missing bindings
+    ;
+
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,py::nodelete>>(m, "IBlackmagicRaw")
         .def("OpenClip", [](IBlackmagicRaw& self, const char* fileName) {
             IBlackmagicRawClip* clip = nullptr;
@@ -411,6 +440,8 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("SetCallback", &IBlackmagicRaw::SetCallback)
         // TODO: Add missing bindings
         .def("FlushJobs", &IBlackmagicRaw::FlushJobs, py::call_guard<py::gil_scoped_release>())
+        DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConfiguration)
+        DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConfigurationEx)
     ;
 
     py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,py::nodelete>>(m, "IBlackmagicRawPipelineIterator")

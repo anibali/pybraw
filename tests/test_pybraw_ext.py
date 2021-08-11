@@ -57,6 +57,35 @@ class TestIBlackmagicRawPipelineIterator:
         assert _pybraw.blackmagicRawPipelineCPU in pipelines
 
 
+class TestIBlackmagicRawPipelineDeviceIterator:
+    @pytest.fixture
+    def factory(self):
+        factory = _pybraw.CreateBlackmagicRawFactoryInstance()
+        yield factory
+        factory.Release()
+
+    @pytest.fixture
+    def device_iterator(self, factory):
+        device_iterator = checked_result(factory.CreatePipelineDeviceIterator(_pybraw.blackmagicRawPipelineCPU, _pybraw.blackmagicRawInteropNone))
+        yield device_iterator
+        device_iterator.Release()
+
+    def test_GetPipeline(self, device_iterator):
+        pipeline = checked_result(device_iterator.GetPipeline())
+        assert pipeline == _pybraw.blackmagicRawPipelineCPU
+
+    def test_GetInterop(self, device_iterator):
+        interop = checked_result(device_iterator.GetInterop())
+        assert interop == _pybraw.blackmagicRawInteropNone
+
+    def test_CreateDevice(self, device_iterator):
+        pipeline_device = checked_result(device_iterator.CreateDevice())
+        assert pipeline_device
+        pipeline_name = checked_result(pipeline_device.GetPipelineName())
+        assert pipeline_name == 'CPU'
+        pipeline_device.Release()
+
+
 class TestIBlackmagicRawClip:
     @pytest.fixture
     def factory(self):

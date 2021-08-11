@@ -162,6 +162,14 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawInstructionSet>(m, "_BlackmagicRawInstructionSet")
+        .value("blackmagicRawInstructionSetSSE41", blackmagicRawInstructionSetSSE41)
+        .value("blackmagicRawInstructionSetAVX", blackmagicRawInstructionSetAVX)
+        .value("blackmagicRawInstructionSetAVX2", blackmagicRawInstructionSetAVX2)
+        .value("blackmagicRawInstructionSetNEON", blackmagicRawInstructionSetNEON)
+        .export_values()
+    ;
+
     py::enum_<_BlackmagicRawInterop>(m, "_BlackmagicRawInterop")
         .value("blackmagicRawInteropNone", blackmagicRawInteropNone)
         .value("blackmagicRawInteropOpenGL", blackmagicRawInteropOpenGL)
@@ -219,6 +227,7 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IUnknown>(m, "IUnknown")
+        // TODO: Add missing bindings
         .def("AddRef", &IUnknown::AddRef)
         .def("Release", &IUnknown::Release)
     ;
@@ -239,9 +248,11 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,py::nodelete>>(m, "IBlackmagicRawClipProcessingAttributes")
+        // TODO: Add missing bindings
     ;
 
     py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,py::nodelete>>(m, "IBlackmagicRawFrameProcessingAttributes")
+        // TODO: Add missing bindings
     ;
 
     py::class_<IBlackmagicRawFrame,IUnknown,std::unique_ptr<IBlackmagicRawFrame,py::nodelete>>(m, "IBlackmagicRawFrame")
@@ -260,7 +271,7 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetMetadataIterator(&iterator);
             return std::make_tuple(result, iterator);
         })
-        // ...
+        // TODO: Add missing bindings
         .def("CreateJobDecodeAndProcessFrame", [](IBlackmagicRawFrame& self, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
             IBlackmagicRawJob* job = nullptr;
             HRESULT result = self.CreateJobDecodeAndProcessFrame(clipProcessingAttributes, frameProcessingAttributes, &job);
@@ -325,7 +336,7 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
             return std::make_tuple(result, sizeBytes);
         })
-        // ...
+        // TODO: Add missing bindings
     ;
 
     py::class_<IBlackmagicRawMetadataIterator,IUnknown,std::unique_ptr<IBlackmagicRawMetadataIterator,py::nodelete>>(m, "IBlackmagicRawMetadataIterator")
@@ -346,7 +357,7 @@ PYBIND11_MODULE(_pybraw, m) {
     py::class_<IBlackmagicRawJob,IUnknown,std::unique_ptr<IBlackmagicRawJob,py::nodelete>>(m, "IBlackmagicRawJob")
         .def("Submit", &IBlackmagicRawJob::Submit)
         .def("Abort", &IBlackmagicRawJob::Abort)
-        // ...
+        // TODO: Add missing bindings
     ;
 
     // https://pybind11.readthedocs.io/en/stable/advanced/classes.html#non-public-destructors
@@ -381,13 +392,13 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetMetadataIterator(&iterator);
             return std::make_tuple(result, iterator);
         })
-        // ...
+        // TODO: Add missing bindings
         .def("CreateJobReadFrame", [](IBlackmagicRawClip& self, uint64_t frameIndex) {
             IBlackmagicRawJob* job = nullptr;
             HRESULT result = self.CreateJobReadFrame(frameIndex, &job);
             return std::make_tuple(result, job);
         })
-        // ...
+        // TODO: Add missing bindings
     ;
 
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,py::nodelete>>(m, "IBlackmagicRaw")
@@ -397,6 +408,7 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, clip);
         })
         .def("SetCallback", &IBlackmagicRaw::SetCallback)
+        // TODO: Add missing bindings
         .def("FlushJobs", &IBlackmagicRaw::FlushJobs, py::call_guard<py::gil_scoped_release>())
     ;
 
@@ -419,6 +431,42 @@ PYBIND11_MODULE(_pybraw, m) {
         })
     ;
 
+    py::class_<IBlackmagicRawPipelineDevice,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDevice,py::nodelete>>(m, "IBlackmagicRawPipelineDevice")
+        .def("SetBestInstructionSet", &IBlackmagicRawPipelineDevice::SetBestInstructionSet)
+        .def("SetInstructionSet", &IBlackmagicRawPipelineDevice::SetInstructionSet)
+        .def("GetInstructionSet", [](IBlackmagicRawPipelineDevice& self) {
+            BlackmagicRawInstructionSet instructionSet = 0;
+            HRESULT result = self.GetInstructionSet(&instructionSet);
+            return std::make_tuple(result, instructionSet);
+        })
+        // TODO: Add missing bindings
+        .def("GetPipelineName", [](IBlackmagicRawPipelineDevice& self) {
+            const char* pipelineName = nullptr;
+            HRESULT result = self.GetPipelineName(&pipelineName);
+            return std::make_tuple(result, pipelineName);
+        })
+        // TODO: Add missing bindings
+    ;
+
+    py::class_<IBlackmagicRawPipelineDeviceIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDeviceIterator,py::nodelete>>(m, "IBlackmagicRawPipelineDeviceIterator")
+        .def("Next", &IBlackmagicRawPipelineDeviceIterator::Next)
+        .def("GetPipeline", [](IBlackmagicRawPipelineDeviceIterator& self) {
+            BlackmagicRawPipeline pipeline = 0;
+            HRESULT result = self.GetPipeline(&pipeline);
+            return std::make_tuple(result, pipeline);
+        })
+        .def("GetInterop", [](IBlackmagicRawPipelineDeviceIterator& self) {
+            BlackmagicRawInterop interop = 0;
+            HRESULT result = self.GetInterop(&interop);
+            return std::make_tuple(result, interop);
+        })
+        .def("CreateDevice", [](IBlackmagicRawPipelineDeviceIterator& self) {
+            IBlackmagicRawPipelineDevice* pipelineDevice = nullptr;
+            HRESULT result = self.CreateDevice(&pipelineDevice);
+            return std::make_tuple(result, pipelineDevice);
+        })
+    ;
+
     py::class_<IBlackmagicRawFactory,IUnknown,std::unique_ptr<IBlackmagicRawFactory,py::nodelete>>(m, "IBlackmagicRawFactory")
         .def("CreateCodec", [](IBlackmagicRawFactory& self) {
             IBlackmagicRaw* codec = nullptr;
@@ -430,6 +478,10 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.CreatePipelineIterator(interop, &pipelineIterator);
             return std::make_tuple(result, pipelineIterator);
         })
-        // ...
+        .def("CreatePipelineDeviceIterator", [](IBlackmagicRawFactory& self, BlackmagicRawPipeline pipeline, BlackmagicRawInterop interop) {
+            IBlackmagicRawPipelineDeviceIterator* deviceIterator = nullptr;
+            HRESULT result = self.CreatePipelineDeviceIterator(pipeline, interop, &deviceIterator);
+            return std::make_tuple(result, deviceIterator);
+        })
     ;
 }

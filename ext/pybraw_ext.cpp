@@ -12,22 +12,23 @@ namespace py = pybind11;
 // counting and placeholders for each of the callback functions.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
 private:
-    std::atomic<int32_t> m_refCount = {0};
-public:
+    std::atomic_ulong m_refCount = {0};
+protected:
     virtual ~BlackmagicRawCallback() {
         assert(m_refCount == 0);
     }
+public:
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) { return E_NOTIMPL; }
     virtual ULONG STDMETHODCALLTYPE AddRef(void) {
-        return ++m_refCount;
+        return m_refCount.fetch_add(1) + 1;
     }
     virtual ULONG STDMETHODCALLTYPE Release(void) {
-        const int32_t newRefValue = --m_refCount;
-        if(newRefValue == 0) {
+        ULONG oldRefCount = m_refCount.fetch_sub(1);
+        assert(oldRefCount > 0);
+        if(oldRefCount == 1) {
             delete this;
         }
-        assert(newRefValue >= 0);
-        return newRefValue;
+        return oldRefCount - 1;
     }
 
     // Default implementations of callback functions.

@@ -439,6 +439,16 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetInstructionSet(&instructionSet);
             return std::make_tuple(result, instructionSet);
         })
+        .def("GetIndex", [](IBlackmagicRawPipelineDevice& self) {
+            uint32_t deviceIndex = 0;
+            HRESULT result = self.GetIndex(&deviceIndex);
+            return std::make_tuple(result, deviceIndex);
+        })
+        .def("GetInterop", [](IBlackmagicRawPipelineDevice& self) {
+            BlackmagicRawInterop interop = 0;
+            HRESULT result = self.GetInterop(&interop);
+            return std::make_tuple(result, interop);
+        })
         // TODO: Add missing bindings
         .def("GetPipelineName", [](IBlackmagicRawPipelineDevice& self) {
             const char* pipelineName = nullptr;

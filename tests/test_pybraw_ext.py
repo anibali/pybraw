@@ -14,7 +14,7 @@ def checked_result(return_values, expected_result=_pybraw.S_OK):
 def test_CreateBlackmagicRawFactoryInstance():
     factory = _pybraw.CreateBlackmagicRawFactoryInstance()
     assert factory
-    factory.Release()
+    assert factory.Release() == 0
 
 
 class TestIBlackmagicRawPipelineIterator:
@@ -22,13 +22,13 @@ class TestIBlackmagicRawPipelineIterator:
     def factory(self):
         factory = _pybraw.CreateBlackmagicRawFactoryInstance()
         yield factory
-        factory.Release()
+        assert factory.Release() == 0
 
     @pytest.fixture
     def pipeline_iterator(self, factory):
         pipeline_iterator = checked_result(factory.CreatePipelineIterator(_pybraw.blackmagicRawInteropNone))
         yield pipeline_iterator
-        pipeline_iterator.Release()
+        assert pipeline_iterator.Release() == 0
 
     def test_GetName(self, pipeline_iterator):
         pipeline_names = []
@@ -62,13 +62,13 @@ class TestIBlackmagicRawPipelineDeviceIterator:
     def factory(self):
         factory = _pybraw.CreateBlackmagicRawFactoryInstance()
         yield factory
-        factory.Release()
+        assert factory.Release() == 0
 
     @pytest.fixture
     def device_iterator(self, factory):
         device_iterator = checked_result(factory.CreatePipelineDeviceIterator(_pybraw.blackmagicRawPipelineCPU, _pybraw.blackmagicRawInteropNone))
         yield device_iterator
-        device_iterator.Release()
+        assert device_iterator.Release() == 0
 
     def test_GetPipeline(self, device_iterator):
         pipeline = checked_result(device_iterator.GetPipeline())
@@ -83,7 +83,7 @@ class TestIBlackmagicRawPipelineDeviceIterator:
         assert pipeline_device
         pipeline_name = checked_result(pipeline_device.GetPipelineName())
         assert pipeline_name == 'CPU'
-        pipeline_device.Release()
+        assert pipeline_device.Release() == 0
 
 
 class TestIBlackmagicRawClip:
@@ -91,19 +91,19 @@ class TestIBlackmagicRawClip:
     def factory(self):
         factory = _pybraw.CreateBlackmagicRawFactoryInstance()
         yield factory
-        factory.Release()
+        assert factory.Release() == 0
 
     @pytest.fixture
     def codec(self, factory):
         codec = checked_result(factory.CreateCodec())
         yield codec
-        codec.Release()
+        assert codec.Release() == 0
 
     @pytest.fixture
     def clip(self, codec, sample_filename):
         clip = checked_result(codec.OpenClip(sample_filename))
         yield clip
-        clip.Release()
+        assert clip.Release() == 0
 
     def test_GetWidth(self, clip):
         width = checked_result(clip.GetWidth())
@@ -144,7 +144,7 @@ class TestIBlackmagicRawClip:
         assert_allclose(metadata['crop_origin'].parray.numpy(), np.array([16.0, 8.0]))
         for value in metadata.values():
             _pybraw.VariantClear(value)
-        iterator.Release()
+        assert iterator.Release() == 0
 
     def test_GetMetadataIterator_midlevel(self, clip):
         iterator = checked_result(clip.GetMetadataIterator())
@@ -161,7 +161,7 @@ class TestIBlackmagicRawClip:
             _pybraw.VariantClear(data)
             result = iterator.Next()
             assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
-        iterator.Release()
+        assert iterator.Release() == 0
         assert 'firmware_version' in metadata
         assert metadata['firmware_version'] == '6.2'
         assert_allclose(metadata['crop_origin'], np.array([16.0, 8.0]))
@@ -180,16 +180,16 @@ class TestIBlackmagicRawClip:
         callback = MyCallback()
         callback.AddRef()
         codec.SetCallback(callback)
-        callback.Release()
+        assert callback.Release() == 1
         read_job = checked_result(clip.CreateJobReadFrame(12))
         read_job.Submit()
-        read_job.Release()
+        assert read_job.Release() == 1
         codec.FlushJobs()
         process_job = checked_result(callback.frame.CreateJobDecodeAndProcessFrame())
-        callback.frame.Release()
+        assert callback.frame.Release() == 1
         del callback.frame
         process_job.Submit()
-        process_job.Release()
+        assert process_job.Release() == 1
         codec.FlushJobs()
         width = checked_result(callback.processed_image.GetWidth())
         assert width == 4096
@@ -201,12 +201,12 @@ class TestIBlackmagicRawClip:
         assert resource_format == _pybraw.blackmagicRawResourceFormatRGBAU8
         resource = checked_result(callback.processed_image.GetResource())
         np_image = resource.reshape(height, width, 4)
+        assert callback.processed_image.Release() == 1  # Reference still held by np_image
+        del callback.processed_image
         assert_allclose(np_image[100, 200], np.array([126, 131, 129, 255]))
         # import matplotlib.pyplot as plt
         # plt.imshow(np_image)
         # plt.show()
-        callback.processed_image.Release()
-        del callback.processed_image
 
 
 class TestBlackmagicRawVariantType:

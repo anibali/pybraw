@@ -55,6 +55,7 @@ def main(args):
     read_job.Release()
     codec.FlushJobs()
 
+    callback.frame.SetResourceFormat(_pybraw.blackmagicRawResourceFormatRGBAU8)
     process_job = checked_result(callback.frame.CreateJobDecodeAndProcessFrame())
     callback.frame.Release()
     del callback.frame
@@ -62,18 +63,13 @@ def main(args):
     process_job.Release()
     codec.FlushJobs()
 
-    width = checked_result(callback.processed_image.GetWidth())
-    height = checked_result(callback.processed_image.GetHeight())
     resource_type = checked_result(callback.processed_image.GetResourceType())
     assert resource_type == _pybraw.blackmagicRawResourceTypeBufferCPU
-    resource_format = checked_result(callback.processed_image.GetResourceFormat())
-    assert resource_format == _pybraw.blackmagicRawResourceFormatRGBAU8
-    resource = checked_result(callback.processed_image.GetResource())
-    np_image = resource.reshape(height, width, 4)
+    np_image = callback.processed_image.numpy()
     callback.processed_image.Release()
     del callback.processed_image
 
-    pil_image = Image.fromarray(np_image).convert('RGB')
+    pil_image = Image.fromarray(np_image[..., :3])
     pil_image.save(opts.output)
 
     clip.Release()

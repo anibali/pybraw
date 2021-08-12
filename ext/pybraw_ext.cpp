@@ -82,9 +82,24 @@ public:
 
 
 template<typename T>
+py::array_t<T> _resource_to_numpy(std::vector<size_t> shape, uint32_t sizeBytes, void* resource, py::handle base) {
+    std::vector<size_t> stride;
+    size_t prod = sizeof(T);
+    for(auto it = shape.rbegin(); it != shape.rend(); ++it) {
+        stride.insert(stride.begin(), prod);
+        prod *= *it;
+    }
+    if(prod != sizeBytes) {
+        throw py::buffer_error("mismatched resource size");
+    }
+    return py::array_t<T>(shape, stride, (T*)resource, base);
+}
+
+
+template<typename T>
 py::array_t<T> _safe_array_to_numpy(const SafeArray& safe_array, py::handle base) {
     if(safe_array.cDims != 1) {
-        throw pybind11::value_error("only 1D SafeArray instances are supported");
+        throw py::buffer_error("only 1D SafeArray instances are supported");
     }
     return py::array_t<T>({safe_array.bounds.cElements}, {sizeof(T)}, &((T*)safe_array.data)[safe_array.bounds.lLbound], base);
 }
@@ -103,7 +118,7 @@ py::array convert_safe_array_to_numpy(const SafeArray& safe_array, py::handle ba
         case blackmagicRawVariantTypeFloat32:
             return _safe_array_to_numpy<float_t>(safe_array, base);
         default:
-            throw pybind11::value_error("unsupported variantType for SafeArray");
+            throw py::buffer_error("unsupported variantType for SafeArray");
     }
 }
 
@@ -230,7 +245,7 @@ PYBIND11_MODULE(_pybraw, m) {
                     // using this array.
                     return convert_safe_array_to_numpy(*self.parray, py::handle());
                 default:
-                    throw pybind11::value_error("unsupported variantType for Variant");
+                    throw py::value_error("unsupported variantType for Variant");
             }
         }, "Return a copy of this Variant as a Python object.")
     ;
@@ -281,6 +296,18 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, iterator);
         })
         // TODO: Add missing bindings
+        .def("SetResolutionScale", &IBlackmagicRawFrame::SetResourceFormat)
+        .def("GetResolutionScale", [](IBlackmagicRawFrame& self) {
+            BlackmagicRawResolutionScale resolutionScale = 0;
+            HRESULT result = self.GetResolutionScale(&resolutionScale);
+            return std::make_tuple(result, resolutionScale);
+        })
+        .def("SetResourceFormat", &IBlackmagicRawFrame::SetResourceFormat)
+        .def("GetResourceFormat", [](IBlackmagicRawFrame& self) {
+            BlackmagicRawResourceFormat resourceFormat = 0;
+            HRESULT result = self.GetResourceFormat(&resourceFormat);
+            return std::make_tuple(result, resourceFormat);
+        })
         .def("CreateJobDecodeAndProcessFrame", [](IBlackmagicRawFrame& self, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
             IBlackmagicRawJob* job = nullptr;
             HRESULT result = self.CreateJobDecodeAndProcessFrame(clipProcessingAttributes, frameProcessingAttributes, &job);
@@ -300,24 +327,45 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetHeight(&height);
             return std::make_tuple(result, height);
         })
-        .def("GetResource", [](IBlackmagicRawProcessedImage& self) -> py::object {
+//        .def("GetResource", [](IBlackmagicRawProcessedImage& self) {
+//            void* resource = nullptr;
+//            HRESULT result = self.GetResource(&resource);
+//            return std::make_tuple(result, (size_t)resource);
+//        })
+        .def("numpy", [](IBlackmagicRawProcessedImage& self) -> py::array {
+            HRESULT result;
             BlackmagicRawResourceType type = 0;
-            HRESULT result = self.GetResourceType(&type);
+            result = self.GetResourceType(&type);
             if(result != S_OK) {
-                return py::cast(std::make_tuple(result, py::none()));
+                throw py::buffer_error("failed to query resource type");
             }
             if(type != blackmagicRawResourceTypeBufferCPU) {
-                throw pybind11::value_error("only CPU resources are supported");
+                throw py::buffer_error("not a CPU resource");
             }
             uint32_t sizeBytes = 0;
             result = self.GetResourceSizeBytes(&sizeBytes);
             if(result != S_OK) {
-                return py::cast(std::make_tuple(result, py::none()));
+                throw py::buffer_error("failed to query resource size");
             }
             void* resource = nullptr;
             result = self.GetResource(&resource);
             if(result != S_OK) {
-                return py::cast(std::make_tuple(result, py::none()));
+                throw py::buffer_error("failed to get resource pointer");
+            }
+            BlackmagicRawResourceFormat format = 0;
+            result = self.GetResourceFormat(&format);
+            if(result != S_OK) {
+                throw py::buffer_error("failed to query resource format");
+            }
+            uint32_t width = 0;
+            result = self.GetWidth(&width);
+            if(result != S_OK) {
+                throw py::buffer_error("failed to query image width");
+            }
+            uint32_t height = 0;
+            result = self.GetHeight(&height);
+            if(result != S_OK) {
+                throw py::buffer_error("failed to query image height");
             }
             // The use of a capsule makes this safe. We increment the reference count for the
             // processed frame and make it the base for the array. This will keep the processed
@@ -327,8 +375,25 @@ PYBIND11_MODULE(_pybraw, m) {
                 IBlackmagicRawProcessedImage* self = (IBlackmagicRawProcessedImage*)ptr;
                 self->Release();
             });
-            auto array = py::array_t<uint8_t>({sizeBytes}, {sizeof(uint8_t)}, (uint8_t*)resource, caps);
-            return py::cast(std::make_tuple(result, array));
+            switch(format) {
+                case blackmagicRawResourceFormatRGBAU8:
+                case blackmagicRawResourceFormatBGRAU8:
+                    return _resource_to_numpy<uint8_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatRGBU16:
+                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatRGBAU16:
+                case blackmagicRawResourceFormatBGRAU16:
+                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatRGBU16Planar:
+                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatRGBF32:
+                    return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatRGBF32Planar:
+                    return _resource_to_numpy<float_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
+                case blackmagicRawResourceFormatBGRAF32:
+                    return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+            }
+            throw py::buffer_error("unsupported resource format");
         })
         .def("GetResourceType", [](IBlackmagicRawProcessedImage& self) {
             BlackmagicRawResourceType type = 0;

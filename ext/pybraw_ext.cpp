@@ -194,6 +194,18 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawResolutionScale>(m, "_BlackmagicRawResolutionScale")
+        .value("blackmagicRawResolutionScaleFull", blackmagicRawResolutionScaleFull)
+        .value("blackmagicRawResolutionScaleHalf", blackmagicRawResolutionScaleHalf)
+        .value("blackmagicRawResolutionScaleQuarter", blackmagicRawResolutionScaleQuarter)
+        .value("blackmagicRawResolutionScaleEighth", blackmagicRawResolutionScaleEighth)
+        .value("blackmagicRawResolutionScaleFullUpsideDown", blackmagicRawResolutionScaleFullUpsideDown)
+        .value("blackmagicRawResolutionScaleHalfUpsideDown", blackmagicRawResolutionScaleHalfUpsideDown)
+        .value("blackmagicRawResolutionScaleQuarterUpsideDown", blackmagicRawResolutionScaleQuarterUpsideDown)
+        .value("blackmagicRawResolutionScaleEighthUpsideDown", blackmagicRawResolutionScaleEighthUpsideDown)
+        .export_values()
+    ;
+
     py::enum_<_BlackmagicRawClipProcessingAttribute>(m, "_BlackmagicRawClipProcessingAttribute")
         .value("blackmagicRawClipProcessingAttributeColorScienceGen", blackmagicRawClipProcessingAttributeColorScienceGen)
         .value("blackmagicRawClipProcessingAttributeGamma", blackmagicRawClipProcessingAttributeGamma)

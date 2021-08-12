@@ -54,3 +54,40 @@ def test_SetResourceFormat(codec, clip, format, max_val, is_planar, channels):
     # import matplotlib.pyplot as plt
     # plt.imshow()
     # plt.show()
+
+
+def test_SetResolutionScale(codec, clip):
+    class MyCallback(_pybraw.BlackmagicRawCallback):
+        def ReadComplete(self, job, result, frame):
+            frame.AddRef()
+            self.frame = frame
+
+        def ProcessComplete(self, job, result, processed_image):
+            processed_image.AddRef()
+            self.processed_image = processed_image
+
+    # NOTE: SetCallback _must_ be called before CreateJobReadFrame
+    callback = MyCallback()
+    callback.AddRef()
+    codec.SetCallback(callback)
+    assert callback.Release() == 1
+    read_job = checked_result(clip.CreateJobReadFrame(12))
+    read_job.Submit()
+    assert read_job.Release() == 1
+    codec.FlushJobs()
+    callback.frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter)
+    process_job = checked_result(callback.frame.CreateJobDecodeAndProcessFrame())
+    assert callback.frame.Release() == 1
+    del callback.frame
+    process_job.Submit()
+    assert process_job.Release() == 1
+    codec.FlushJobs()
+
+    # Check that the resolution is one quarter of the original DCI full frame 4K.
+    width = checked_result(callback.processed_image.GetWidth())
+    assert width == 1024
+    height = checked_result(callback.processed_image.GetHeight())
+    assert height == 540
+
+    assert callback.processed_image.Release() == 0
+    del callback.processed_image

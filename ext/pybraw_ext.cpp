@@ -296,7 +296,7 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, iterator);
         })
         // TODO: Add missing bindings
-        .def("SetResolutionScale", &IBlackmagicRawFrame::SetResourceFormat)
+        .def("SetResolutionScale", &IBlackmagicRawFrame::SetResolutionScale)
         .def("GetResolutionScale", [](IBlackmagicRawFrame& self) {
             BlackmagicRawResolutionScale resolutionScale = 0;
             HRESULT result = self.GetResolutionScale(&resolutionScale);

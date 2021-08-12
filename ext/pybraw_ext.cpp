@@ -412,6 +412,11 @@ PYBIND11_MODULE(_pybraw, m) {
 
     py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,py::nodelete>>(m, "IBlackmagicRawConfiguration")
         // TODO: Add missing bindings
+        .def("IsPipelineSupported", [](IBlackmagicRawConfiguration& self, BlackmagicRawPipeline pipeline) {
+            bool pipelineSupported = 0;
+            HRESULT result = self.IsPipelineSupported(pipeline, &pipelineSupported);
+            return std::make_tuple(result, pipelineSupported);
+        })
         .def("SetCPUThreads", &IBlackmagicRawConfiguration::SetCPUThreads)
         .def("GetCPUThreads", [](IBlackmagicRawConfiguration& self) {
             uint32_t threadCount = 0;
@@ -423,7 +428,12 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetMaxCPUThreadCount(&threadCount);
             return std::make_tuple(result, threadCount);
         })
-        // TODO: Add missing bindings
+        .def("SetWriteMetadataPerFrame", &IBlackmagicRawConfiguration::SetWriteMetadataPerFrame)
+        .def("GetWriteMetadataPerFrame", [](IBlackmagicRawConfiguration& self) {
+            bool writePerFrame = 0;
+            HRESULT result = self.GetWriteMetadataPerFrame(&writePerFrame);
+            return std::make_tuple(result, writePerFrame);
+        })
         .def("SetFromDevice", &IBlackmagicRawConfiguration::SetFromDevice)
     ;
 

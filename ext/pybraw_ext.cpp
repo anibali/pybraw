@@ -194,6 +194,34 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawClipProcessingAttribute>(m, "_BlackmagicRawClipProcessingAttribute")
+        .value("blackmagicRawClipProcessingAttributeColorScienceGen", blackmagicRawClipProcessingAttributeColorScienceGen)
+        .value("blackmagicRawClipProcessingAttributeGamma", blackmagicRawClipProcessingAttributeGamma)
+        .value("blackmagicRawClipProcessingAttributeGamut", blackmagicRawClipProcessingAttributeGamut)
+        .value("blackmagicRawClipProcessingAttributeToneCurveContrast", blackmagicRawClipProcessingAttributeToneCurveContrast)
+        .value("blackmagicRawClipProcessingAttributeToneCurveSaturation", blackmagicRawClipProcessingAttributeToneCurveSaturation)
+        .value("blackmagicRawClipProcessingAttributeToneCurveMidpoint", blackmagicRawClipProcessingAttributeToneCurveMidpoint)
+        .value("blackmagicRawClipProcessingAttributeToneCurveHighlights", blackmagicRawClipProcessingAttributeToneCurveHighlights)
+        .value("blackmagicRawClipProcessingAttributeToneCurveShadows", blackmagicRawClipProcessingAttributeToneCurveShadows)
+        .value("blackmagicRawClipProcessingAttributeToneCurveVideoBlackLevel", blackmagicRawClipProcessingAttributeToneCurveVideoBlackLevel)
+        .value("blackmagicRawClipProcessingAttributeToneCurveBlackLevel", blackmagicRawClipProcessingAttributeToneCurveBlackLevel)
+        .value("blackmagicRawClipProcessingAttributeToneCurveWhiteLevel", blackmagicRawClipProcessingAttributeToneCurveWhiteLevel)
+        .value("blackmagicRawClipProcessingAttributeHighlightRecovery", blackmagicRawClipProcessingAttributeHighlightRecovery)
+        .value("blackmagicRawClipProcessingAttributeAnalogGainIsConstant", blackmagicRawClipProcessingAttributeAnalogGainIsConstant)
+        .value("blackmagicRawClipProcessingAttributeAnalogGain", blackmagicRawClipProcessingAttributeAnalogGain)
+        .value("blackmagicRawClipProcessingAttributePost3DLUTMode", blackmagicRawClipProcessingAttributePost3DLUTMode)
+        .value("blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTName", blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTName)
+        .value("blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTTitle", blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTTitle)
+        .value("blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTSize", blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTSize)
+        .value("blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTData", blackmagicRawClipProcessingAttributeEmbeddedPost3DLUTData)
+        .value("blackmagicRawClipProcessingAttributeSidecarPost3DLUTName", blackmagicRawClipProcessingAttributeSidecarPost3DLUTName)
+        .value("blackmagicRawClipProcessingAttributeSidecarPost3DLUTTitle", blackmagicRawClipProcessingAttributeSidecarPost3DLUTTitle)
+        .value("blackmagicRawClipProcessingAttributeSidecarPost3DLUTSize", blackmagicRawClipProcessingAttributeSidecarPost3DLUTSize)
+        .value("blackmagicRawClipProcessingAttributeSidecarPost3DLUTData", blackmagicRawClipProcessingAttributeSidecarPost3DLUTData)
+        .value("blackmagicRawClipProcessingAttributeGamutCompressionEnable", blackmagicRawClipProcessingAttributeGamutCompressionEnable)
+        .export_values()
+    ;
+
     py::enum_<_BlackmagicRawInterop>(m, "_BlackmagicRawInterop")
         .value("blackmagicRawInteropNone", blackmagicRawInteropNone)
         .value("blackmagicRawInteropOpenGL", blackmagicRawInteropOpenGL)
@@ -218,6 +246,7 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<Variant>(m, "Variant")
+        .def(py::init<>())
         .def_readwrite("vt", &Variant::vt)
         .def_readwrite("iVal", &Variant::iVal)
         .def_readwrite("uiVal", &Variant::uiVal)
@@ -271,7 +300,18 @@ PYBIND11_MODULE(_pybraw, m) {
         .def(py::init<>())
     ;
 
+    py::class_<IBlackmagicRawClipEx,IUnknown,std::unique_ptr<IBlackmagicRawClipEx,py::nodelete>>(m, "IBlackmagicRawClipEx")
+        // TODO: Add missing bindings
+    ;
+
     py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,py::nodelete>>(m, "IBlackmagicRawClipProcessingAttributes")
+        .def("GetClipAttribute", [](IBlackmagicRawClipProcessingAttributes& self, BlackmagicRawClipProcessingAttribute attribute) {
+            Variant value;
+            VariantInit(&value);
+            HRESULT result = self.GetClipAttribute(attribute, &value);
+            return std::make_tuple(result, value);
+        })
+        .def("SetClipAttribute", &IBlackmagicRawClipProcessingAttributes::SetClipAttribute)
         // TODO: Add missing bindings
     ;
 
@@ -473,6 +513,8 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, job);
         })
         // TODO: Add missing bindings
+        DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipEx)
+        DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
     ;
 
     py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,py::nodelete>>(m, "IBlackmagicRawConfiguration")

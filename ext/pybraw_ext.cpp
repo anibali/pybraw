@@ -114,7 +114,35 @@ public:
     void TrimComplete(IBlackmagicRawJob* job, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, TrimComplete, job, result);
     }
-    // TODO: Enable overriding of other methods.
+    void SidecarMetadataParseWarning(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "SidecarMetadataParseWarning");
+        if(pyfunc) {
+            clip->AddRef();
+            pyfunc(
+                py::cast(clip, py::return_value_policy::take_ownership),
+                fileName,
+                lineNumber,
+                info
+            );
+        }
+    }
+    void SidecarMetadataParseError(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "SidecarMetadataParseError");
+        if(pyfunc) {
+            clip->AddRef();
+            pyfunc(
+                py::cast(clip, py::return_value_policy::take_ownership),
+                fileName,
+                lineNumber,
+                info
+            );
+        }
+    }
+    void PreparePipelineComplete(void* userData, HRESULT result) override {
+        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, PreparePipelineComplete, userData, result);
+    }
 };
 
 

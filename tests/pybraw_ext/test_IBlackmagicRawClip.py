@@ -30,7 +30,7 @@ def test_GetTimecodeForFrame(clip):
     assert timecode == '14:39:00:23'
 
 
-def test_GetMetadataIterator_lowlevel(clip):
+def test_GetMetadataIterator(clip):
     iterator = checked_result(clip.GetMetadataIterator())
     metadata = {}
     while True:
@@ -38,35 +38,9 @@ def test_GetMetadataIterator_lowlevel(clip):
         if result == _pybraw.E_FAIL:
             break
         assert result == _pybraw.S_OK
-        data = checked_result(iterator.GetData())
-        metadata[key] = data
+        metadata[key] = checked_result(iterator.GetData()).to_py()
         result = iterator.Next()
         assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
-    assert 'firmware_version' in metadata
-    assert metadata['firmware_version'].vt == _pybraw.blackmagicRawVariantTypeString
-    assert metadata['firmware_version'].bstrVal == '6.2'
-    assert metadata['crop_origin'].vt == _pybraw.blackmagicRawVariantTypeSafeArray
-    assert_allclose(metadata['crop_origin'].parray.numpy(), np.array([16.0, 8.0]))
-    for value in metadata.values():
-        _pybraw.VariantClear(value)
-
-
-def test_GetMetadataIterator_midlevel(clip):
-    iterator = checked_result(clip.GetMetadataIterator())
-    metadata = {}
-    while True:
-        result, key = iterator.GetKey()
-        if result == _pybraw.E_FAIL:
-            break
-        assert result == _pybraw.S_OK
-        data = checked_result(iterator.GetData())
-        metadata[key] = data.to_py()
-        # We expect the data to be copied when calling to_py(), so it should be safe to clear
-        # the variant here.
-        _pybraw.VariantClear(data)
-        result = iterator.Next()
-        assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
-    del iterator
     assert 'firmware_version' in metadata
     assert metadata['firmware_version'] == '6.2'
     assert_allclose(metadata['crop_origin'], np.array([16.0, 8.0]))
@@ -80,9 +54,7 @@ def test_GetClipAttribute(clip):
 
 def test_SetClipAttribute(clip):
     attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
-    value = _pybraw.Variant()
-    value.vt = _pybraw.blackmagicRawVariantTypeFloat32
-    value.fltVal = 0.25
+    value = _pybraw.VariantCreateFloat32(0.25)
     checked_result(attributes.SetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel, value))
     black_level = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel))
     assert black_level.to_py() == 0.25

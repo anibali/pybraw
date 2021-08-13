@@ -24,6 +24,22 @@ public:
 };
 
 
+class VariantClearer {
+public:
+    void operator() (Variant* variant) {
+        VariantClear(variant);
+    }
+};
+
+
+class SafeArrayDestroyer {
+public:
+    void operator() (SafeArray* safe_array) {
+        SafeArrayDestroy(safe_array);
+    }
+};
+
+
 // Concrete subclass of IBlackmagicRawCallback which provides an implementation of reference
 // counting and placeholders for each of the callback functions.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
@@ -118,16 +134,22 @@ py::array_t<T> _resource_to_numpy(std::vector<size_t> shape, uint32_t sizeBytes,
 
 
 template<typename T>
-py::array_t<T> _safe_array_to_numpy(const SafeArray& safe_array, py::handle base) {
-    if(safe_array.cDims != 1) {
+py::array_t<T> _safe_array_to_numpy(SafeArray* safe_array, py::handle base) {
+    if(safe_array->cDims != 1) {
         throw py::buffer_error("only 1D SafeArray instances are supported");
     }
-    return py::array_t<T>({safe_array.bounds.cElements}, {sizeof(T)}, &((T*)safe_array.data)[safe_array.bounds.lLbound], base);
+    void* ptr;
+    SafeArrayAccessData(safe_array, &ptr);
+    py::array_t<T> array = py::array_t<T>({safe_array->bounds.cElements}, {sizeof(T)}, &((T*)ptr)[safe_array->bounds.lLbound], base);
+    SafeArrayUnaccessData(safe_array);
+    return array;
 }
 
 
-py::array convert_safe_array_to_numpy(const SafeArray& safe_array, py::handle base) {
-    switch(safe_array.variantType) {
+py::array convert_safe_array_to_numpy(SafeArray* safe_array, py::handle base) {
+    switch(safe_array->variantType) {
+        case blackmagicRawVariantTypeU8:
+            return _safe_array_to_numpy<uint8_t>(safe_array, base);
         case blackmagicRawVariantTypeS16:
             return _safe_array_to_numpy<int16_t>(safe_array, base);
         case blackmagicRawVariantTypeU16:
@@ -144,12 +166,118 @@ py::array convert_safe_array_to_numpy(const SafeArray& safe_array, py::handle ba
 }
 
 
+SafeArray* convert_numpy_to_safe_array(py::array array) {
+    py::array buf = py::array::ensure(array);
+    if(!buf) {
+        throw py::buffer_error("not a numpy array");
+    }
+    BlackmagicRawVariantType vt = blackmagicRawVariantTypeEmpty;
+    if(py::isinstance<py::array_t<uint8_t>>(buf)) {
+        vt = blackmagicRawVariantTypeU8;
+    } else if(py::isinstance<py::array_t<int16_t>>(buf)) {
+        vt = blackmagicRawVariantTypeS16;
+    } else if(py::isinstance<py::array_t<uint16_t>>(buf)) {
+        vt = blackmagicRawVariantTypeU16;
+    } else if(py::isinstance<py::array_t<int32_t>>(buf)) {
+        vt = blackmagicRawVariantTypeS32;
+    } else if(py::isinstance<py::array_t<uint32_t>>(buf)) {
+        vt = blackmagicRawVariantTypeU32;
+    } else if(py::isinstance<py::array_t<float_t>>(buf)) {
+        vt = blackmagicRawVariantTypeFloat32;
+    } else {
+        throw py::buffer_error("unsupported data type");
+    }
+    void* data = malloc(buf.nbytes());
+    memcpy(data, buf.data(), buf.nbytes());
+    // NOTE: We aren't using SafeArrayCreate because it segfaults for signed integer types.
+    SafeArray* parray = new SafeArray();
+    parray->variantType = vt;
+    parray->cDims = 1;
+    parray->data = data;
+    parray->bounds.lLbound = 0;
+    parray->bounds.cElements = (uint32_t)buf.size();
+    return parray;
+}
+
+
+Variant VariantCreateS16(int16_t value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeS16;
+    variant.iVal = value;
+    return variant;
+}
+
+
+Variant VariantCreateU16(uint16_t value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeU16;
+    variant.uiVal = value;
+    return variant;
+}
+
+
+Variant VariantCreateS32(int32_t value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeS32;
+    variant.intVal = value;
+    return variant;
+}
+
+
+Variant VariantCreateU32(uint32_t value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeU32;
+    variant.uintVal = value;
+    return variant;
+}
+
+
+Variant VariantCreateFloat32(float_t value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeFloat32;
+    variant.fltVal = value;
+    return variant;
+}
+
+
+Variant VariantCreateString(const char* value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeString;
+    variant.bstrVal = strdup(value);
+    return variant;
+}
+
+
+Variant VariantCreateSafeArray(py::array value) {
+    Variant variant;
+    VariantInit(&variant);
+    variant.vt = blackmagicRawVariantTypeSafeArray;
+    variant.parray = convert_numpy_to_safe_array(value);
+    return variant;
+}
+
+
 PYBIND11_MODULE(_pybraw, m) {
     m.doc() = "Python bindings for Blackmagic RAW SDK";
     m.def("CreateBlackmagicRawFactoryInstance", &CreateBlackmagicRawFactoryInstance);
 
-    m.def("VariantInit", &VariantInit);
-    m.def("VariantClear", &VariantClear);
+//    m.def("VariantInit", &VariantInit);
+//    m.def("VariantClear", &VariantClear);
+    m.def("VariantCreateS16", &VariantCreateS16);
+    m.def("VariantCreateU16", &VariantCreateU16);
+    m.def("VariantCreateS32", &VariantCreateS32);
+    m.def("VariantCreateU32", &VariantCreateU32);
+    m.def("VariantCreateFloat32", &VariantCreateFloat32);
+    m.def("VariantCreateString", &VariantCreateString);
+    m.def("VariantCreateSafeArray", &VariantCreateSafeArray);
+
+    m.def("SafeArrayCreateFromNumpy", &convert_numpy_to_safe_array);
 
     // HRESULT constants.
     m.attr("S_OK") = py::int_(S_OK);
@@ -266,28 +394,30 @@ PYBIND11_MODULE(_pybraw, m) {
         .def_readwrite("cElements", &SafeArrayBound::cElements)
     ;
 
-    py::class_<SafeArray>(m, "SafeArray")
+    py::class_<SafeArray,std::unique_ptr<SafeArray,SafeArrayDestroyer>>(m, "SafeArray")
         .def_readwrite("variantType", &SafeArray::variantType)
         .def_readwrite("cDims", &SafeArray::cDims)
         .def_readwrite("data", &SafeArray::data)
         .def_readwrite("bounds", &SafeArray::bounds)
-        .def("numpy", [](SafeArray& self) -> py::array {
-            // WARN: This is set up such that data is not copied. So if the SafeArray is freed,
-            //       it is not safe to continue using this array.
-            return convert_safe_array_to_numpy(self, py::none());
-        }, "Return a view of this SafeArray as a NumPy array.")
+        .def("to_py", [](SafeArray* self) -> py::array {
+            return convert_safe_array_to_numpy(self, py::handle());
+        })
+//        .def("to_py_nocopy", [](SafeArray* self) -> py::array {
+//            // WARN: This is set up such that data is not copied. So if the SafeArray is freed,
+//            //       it is not safe to continue using this array.
+//            return convert_safe_array_to_numpy(self, py::none());
+//        })
     ;
 
-    py::class_<Variant>(m, "Variant")
-        .def(py::init<>())
-        .def_readwrite("vt", &Variant::vt)
-        .def_readwrite("iVal", &Variant::iVal)
-        .def_readwrite("uiVal", &Variant::uiVal)
-        .def_readwrite("intVal", &Variant::intVal)
-        .def_readwrite("uintVal", &Variant::uintVal)
-        .def_readwrite("fltVal", &Variant::fltVal)
-        .def_readwrite("bstrVal", &Variant::bstrVal)
-        .def_readwrite("parray", &Variant::parray)
+    py::class_<Variant,std::unique_ptr<Variant,VariantClearer>>(m, "Variant")
+//        .def_readwrite("vt", &Variant::vt)
+//        .def_readwrite("iVal", &Variant::iVal)
+//        .def_readwrite("uiVal", &Variant::uiVal)
+//        .def_readwrite("intVal", &Variant::intVal)
+//        .def_readwrite("uintVal", &Variant::uintVal)
+//        .def_readwrite("fltVal", &Variant::fltVal)
+//        .def_readwrite("bstrVal", &Variant::bstrVal)
+//        .def_readwrite("parray", &Variant::parray)
         .def("to_py", [](Variant& self) -> py::object {
             switch(self.vt) {
                 case blackmagicRawVariantTypeS16:
@@ -303,9 +433,7 @@ PYBIND11_MODULE(_pybraw, m) {
                 case blackmagicRawVariantTypeString:
                     return py::cast(self.bstrVal);
                 case blackmagicRawVariantTypeSafeArray:
-                    // Data will be copied, so it is safe to clear the Variant and continue
-                    // using this array.
-                    return convert_safe_array_to_numpy(*self.parray, py::handle());
+                    return convert_safe_array_to_numpy(self.parray, py::handle());
                 default:
                     throw py::value_error("unsupported variantType for Variant");
             }

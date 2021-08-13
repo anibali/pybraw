@@ -46,6 +46,34 @@ def test_GetMetadataIterator(clip):
     assert_allclose(metadata['crop_origin'], np.array([16.0, 8.0]))
 
 
+def test_GetMetadata(clip):
+    day_night = checked_result(clip.GetMetadata('day_night'))
+    assert day_night.to_py() == 'day'
+
+
+def test_SetMetadata(clip):
+    checked_result(clip.SetMetadata('day_night', _pybraw.VariantCreateString('night')))
+    day_night = checked_result(clip.GetMetadata('day_night'))
+    assert day_night.to_py() == 'night'
+
+
+def test_GetCameraType(clip):
+    camera_type = checked_result(clip.GetCameraType())
+    assert camera_type == 'Blackmagic Pocket Cinema Camera 4K'
+
+
+def test_CloneClipProcessingAttributes(clip):
+    attributes = checked_result(clip.CloneClipProcessingAttributes())
+    assert isinstance(attributes, _pybraw.IBlackmagicRawClipProcessingAttributes)
+    gamut = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeGamut))
+    assert gamut.to_py() == 'Blackmagic Design'
+
+
+def test_GetSidecarFileAttached(clip):
+    is_attached = checked_result(clip.GetSidecarFileAttached())
+    assert is_attached == False
+
+
 def test_GetClipAttribute(clip):
     attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
     gamut = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeGamut))

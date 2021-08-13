@@ -700,7 +700,7 @@ PYBIND11_MODULE(_pybraw, m) {
     py::class_<IBlackmagicRawJob,IUnknown,std::unique_ptr<IBlackmagicRawJob,py::nodelete>>(m, "IBlackmagicRawJob")
         .def("Submit", &IBlackmagicRawJob::Submit)
         .def("Abort", &IBlackmagicRawJob::Abort)
-        // TODO: Add missing bindings
+        // SetUserData and GetUserData are omitted due to memory management difficulties.
     ;
 
     py::class_<IBlackmagicRawClip,IUnknown,std::unique_ptr<IBlackmagicRawClip,Releaser>>(m, "IBlackmagicRawClip")
@@ -734,13 +734,59 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetMetadataIterator(&iterator);
             return std::make_tuple(result, iterator);
         })
-        // TODO: Add missing bindings
+        .def("GetMetadata", [](IBlackmagicRawClip& self, const char* key) {
+            Variant value;
+            VariantInit(&value);
+            HRESULT result = self.GetMetadata(key, &value);
+            return std::make_tuple(result, value);
+        })
+        .def("SetMetadata", &IBlackmagicRawClip::SetMetadata)
+        .def("GetCameraType", [](IBlackmagicRawClip& self) {
+            const char* cameraType = nullptr;
+            HRESULT result = self.GetCameraType(&cameraType);
+            return std::make_tuple(result, cameraType);
+        })
+        .def("CloneClipProcessingAttributes", [](IBlackmagicRawClip& self) {
+            IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes = nullptr;
+            HRESULT result = self.CloneClipProcessingAttributes(&clipProcessingAttributes);
+            return std::make_tuple(result, clipProcessingAttributes);
+        })
+        .def("GetMulticardFileCount", [](IBlackmagicRawClip& self) {
+            uint32_t multicardFileCount = 0;
+            HRESULT result = self.GetMulticardFileCount(&multicardFileCount);
+            return std::make_tuple(result, multicardFileCount);
+        })
+        .def("IsMulticardFilePresent", [](IBlackmagicRawClip& self, uint32_t index) {
+            bool isMulticardFilePresent = false;
+            HRESULT result = self.IsMulticardFilePresent(index, &isMulticardFilePresent);
+            return std::make_tuple(result, isMulticardFilePresent);
+        })
+        .def("GetSidecarFileAttached", [](IBlackmagicRawClip& self) {
+            bool isSidecarFileAttached = false;
+            HRESULT result = self.GetSidecarFileAttached(&isSidecarFileAttached);
+            return std::make_tuple(result, isSidecarFileAttached);
+        })
+        .def("SaveSidecarFile", &IBlackmagicRawClip::SaveSidecarFile)
+        .def("ReloadSidecarFile", &IBlackmagicRawClip::ReloadSidecarFile)
         .def("CreateJobReadFrame", [](IBlackmagicRawClip& self, uint64_t frameIndex) {
             IBlackmagicRawJob* job = nullptr;
             HRESULT result = self.CreateJobReadFrame(frameIndex, &job);
             return std::make_tuple(result, job);
         })
-        // TODO: Add missing bindings
+        .def(
+            "CreateJobTrim",
+            [](IBlackmagicRawClip& self, const char* fileName, uint64_t frameIndex, uint64_t frameCount, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobTrim(fileName, frameIndex, frameCount, clipProcessingAttributes, frameProcessingAttributes, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job that will export part of the clip into a new .braw file.",
+            py::arg("fileName"),
+            py::arg("frameIndex"),
+            py::arg("frameCount"),
+            py::arg("clipProcessingAttributes").none(true) = nullptr,
+            py::arg("frameProcessingAttributes").none(true) = nullptr
+        )
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipEx)
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
     ;

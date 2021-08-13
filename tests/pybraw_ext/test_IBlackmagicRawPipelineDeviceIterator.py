@@ -15,5 +15,4 @@ def test_GetInterop(cpu_device_iterator):
 
 def test_CreateDevice(cpu_device_iterator):
     pipeline_device = checked_result(cpu_device_iterator.CreateDevice())
-    assert pipeline_device
-    assert pipeline_device.Release() == 0
+    assert isinstance(pipeline_device, _pybraw.IBlackmagicRawPipelineDevice)

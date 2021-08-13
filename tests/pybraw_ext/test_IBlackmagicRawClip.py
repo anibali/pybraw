@@ -49,7 +49,6 @@ def test_GetMetadataIterator_lowlevel(clip):
     assert_allclose(metadata['crop_origin'].parray.numpy(), np.array([16.0, 8.0]))
     for value in metadata.values():
         _pybraw.VariantClear(value)
-    assert iterator.Release() == 0
 
 
 def test_GetMetadataIterator_midlevel(clip):
@@ -67,7 +66,7 @@ def test_GetMetadataIterator_midlevel(clip):
         _pybraw.VariantClear(data)
         result = iterator.Next()
         assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
-    assert iterator.Release() == 0
+    del iterator
     assert 'firmware_version' in metadata
     assert metadata['firmware_version'] == '6.2'
     assert_allclose(metadata['crop_origin'], np.array([16.0, 8.0]))
@@ -77,7 +76,6 @@ def test_GetClipAttribute(clip):
     attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
     gamut = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeGamut))
     assert gamut.to_py() == 'Blackmagic Design'
-    attributes.Release()
 
 
 def test_SetClipAttribute(clip):
@@ -88,4 +86,3 @@ def test_SetClipAttribute(clip):
     checked_result(attributes.SetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel, value))
     black_level = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel))
     assert black_level.to_py() == 0.25
-    attributes.Release()

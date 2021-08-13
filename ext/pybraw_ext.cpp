@@ -16,6 +16,14 @@ namespace py = pybind11;
 })
 
 
+class Releaser {
+public:
+    void operator() (IUnknown* obj) {
+        obj->Release();
+    }
+};
+
+
 // Concrete subclass of IBlackmagicRawCallback which provides an implementation of reference
 // counting and placeholders for each of the callback functions.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
@@ -26,6 +34,9 @@ protected:
         assert(m_refCount == 0);
     }
 public:
+    BlackmagicRawCallback() {
+        AddRef();
+    }
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) { return E_NOTIMPL; }
     virtual ULONG STDMETHODCALLTYPE AddRef(void) {
         return m_refCount.fetch_add(1) + 1;
@@ -55,10 +66,28 @@ public:
 class PyBrawCallback : public BlackmagicRawCallback {
 public:
     void ReadComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawFrame* frame) override {
-        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, ReadComplete, job, result, frame);
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "ReadComplete");
+        if(pyfunc) {
+            frame->AddRef();
+            pyfunc(
+                job,
+                result,
+                py::cast(frame, py::return_value_policy::take_ownership)
+            );
+        }
     }
     void ProcessComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawProcessedImage* processedImage) override {
-        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, ProcessComplete, job, result, processedImage);
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "ProcessComplete");
+        if(pyfunc) {
+            processedImage->AddRef();
+            pyfunc(
+                job,
+                result,
+                py::cast(processedImage, py::return_value_policy::take_ownership)
+            );
+        }
     }
     void DecodeComplete(IBlackmagicRawJob* job, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, DecodeComplete, job, result);
@@ -69,15 +98,7 @@ public:
     void TrimComplete(IBlackmagicRawJob* job, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, TrimComplete, job, result);
     }
-    void SidecarMetadataParseWarning(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
-        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, SidecarMetadataParseWarning, clip, fileName, lineNumber, info);
-    }
-    void SidecarMetadataParseError(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
-        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, SidecarMetadataParseError, clip, fileName, lineNumber, info);
-    }
-    void PreparePipelineComplete(void* userData, HRESULT result) override {
-        PYBIND11_OVERRIDE(void, BlackmagicRawCallback, PreparePipelineComplete, userData, result);
-    }
+    // TODO: Enable overriding of other methods.
 };
 
 
@@ -297,7 +318,7 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("Release", &IUnknown::Release)
     ;
 
-    py::class_<IBlackmagicRawCallback,IUnknown,std::unique_ptr<IBlackmagicRawCallback,py::nodelete>>(m, "IBlackmagicRawCallback")
+    py::class_<IBlackmagicRawCallback,IUnknown,std::unique_ptr<IBlackmagicRawCallback,Releaser>>(m, "IBlackmagicRawCallback")
         .def("ReadComplete", &IBlackmagicRawCallback::ReadComplete)
         .def("ProcessComplete", &IBlackmagicRawCallback::ProcessComplete)
         .def("DecodeComplete", &IBlackmagicRawCallback::DecodeComplete)
@@ -308,15 +329,15 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("PreparePipelineComplete", &IBlackmagicRawCallback::PreparePipelineComplete)
     ;
 
-    py::class_<BlackmagicRawCallback,PyBrawCallback,IBlackmagicRawCallback,std::unique_ptr<BlackmagicRawCallback,py::nodelete>>(m, "BlackmagicRawCallback")
+    py::class_<BlackmagicRawCallback,PyBrawCallback,IBlackmagicRawCallback,std::unique_ptr<BlackmagicRawCallback,Releaser>>(m, "BlackmagicRawCallback")
         .def(py::init<>())
     ;
 
-    py::class_<IBlackmagicRawClipEx,IUnknown,std::unique_ptr<IBlackmagicRawClipEx,py::nodelete>>(m, "IBlackmagicRawClipEx")
+    py::class_<IBlackmagicRawClipEx,IUnknown,std::unique_ptr<IBlackmagicRawClipEx,Releaser>>(m, "IBlackmagicRawClipEx")
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,py::nodelete>>(m, "IBlackmagicRawClipProcessingAttributes")
+    py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,Releaser>>(m, "IBlackmagicRawClipProcessingAttributes")
         .def("GetClipAttribute", [](IBlackmagicRawClipProcessingAttributes& self, BlackmagicRawClipProcessingAttribute attribute) {
             Variant value;
             VariantInit(&value);
@@ -327,11 +348,11 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,py::nodelete>>(m, "IBlackmagicRawFrameProcessingAttributes")
+    py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,Releaser>>(m, "IBlackmagicRawFrameProcessingAttributes")
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRawFrame,IUnknown,std::unique_ptr<IBlackmagicRawFrame,py::nodelete>>(m, "IBlackmagicRawFrame")
+    py::class_<IBlackmagicRawFrame,IUnknown,std::unique_ptr<IBlackmagicRawFrame,Releaser>>(m, "IBlackmagicRawFrame")
         .def("GetFrameIndex", [](IBlackmagicRawFrame& self) {
             uint64_t frameIndex = 0;
             HRESULT result = self.GetFrameIndex(&frameIndex);
@@ -368,7 +389,7 @@ PYBIND11_MODULE(_pybraw, m) {
         py::arg("clipProcessingAttributes").none(true) = nullptr, py::arg("frameProcessingAttributes").none(true) = nullptr)
     ;
 
-    py::class_<IBlackmagicRawProcessedImage,IUnknown,std::unique_ptr<IBlackmagicRawProcessedImage,py::nodelete>>(m, "IBlackmagicRawProcessedImage")
+    py::class_<IBlackmagicRawProcessedImage,IUnknown,std::unique_ptr<IBlackmagicRawProcessedImage,Releaser>>(m, "IBlackmagicRawProcessedImage")
         .def("GetWidth", [](IBlackmagicRawProcessedImage& self) {
             uint32_t width = 0;
             HRESULT result = self.GetWidth(&width);
@@ -465,7 +486,7 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRawMetadataIterator,IUnknown,std::unique_ptr<IBlackmagicRawMetadataIterator,py::nodelete>>(m, "IBlackmagicRawMetadataIterator")
+    py::class_<IBlackmagicRawMetadataIterator,IUnknown,std::unique_ptr<IBlackmagicRawMetadataIterator,Releaser>>(m, "IBlackmagicRawMetadataIterator")
         .def("Next", &IBlackmagicRawMetadataIterator::Next)
         .def("GetKey", [](IBlackmagicRawMetadataIterator& self) {
             const char* key = nullptr;
@@ -487,7 +508,7 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     // https://pybind11.readthedocs.io/en/stable/advanced/classes.html#non-public-destructors
-    py::class_<IBlackmagicRawClip,IUnknown,std::unique_ptr<IBlackmagicRawClip,py::nodelete>>(m, "IBlackmagicRawClip")
+    py::class_<IBlackmagicRawClip,IUnknown,std::unique_ptr<IBlackmagicRawClip,Releaser>>(m, "IBlackmagicRawClip")
         .def("GetWidth", [](IBlackmagicRawClip& self) {
             uint32_t width = 0;
             HRESULT result = self.GetWidth(&width);
@@ -529,7 +550,7 @@ PYBIND11_MODULE(_pybraw, m) {
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
     ;
 
-    py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,py::nodelete>>(m, "IBlackmagicRawConfiguration")
+    py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,Releaser>>(m, "IBlackmagicRawConfiguration")
         // TODO: Add missing bindings
         .def("IsPipelineSupported", [](IBlackmagicRawConfiguration& self, BlackmagicRawPipeline pipeline) {
             bool pipelineSupported = 0;
@@ -556,11 +577,11 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("SetFromDevice", &IBlackmagicRawConfiguration::SetFromDevice)
     ;
 
-    py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,py::nodelete>>(m, "IBlackmagicRawConfigurationEx")
+    py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,Releaser>>(m, "IBlackmagicRawConfigurationEx")
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,py::nodelete>>(m, "IBlackmagicRaw")
+    py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,Releaser>>(m, "IBlackmagicRaw")
         .def("OpenClip", [](IBlackmagicRaw& self, const char* fileName) {
             IBlackmagicRawClip* clip = nullptr;
             HRESULT result = self.OpenClip(fileName, &clip);
@@ -573,7 +594,7 @@ PYBIND11_MODULE(_pybraw, m) {
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConfigurationEx)
     ;
 
-    py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,py::nodelete>>(m, "IBlackmagicRawPipelineIterator")
+    py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,Releaser>>(m, "IBlackmagicRawPipelineIterator")
         .def("Next", &IBlackmagicRawPipelineIterator::Next)
         .def("GetName", [](IBlackmagicRawPipelineIterator& self) {
             const char* pipelineName = nullptr;
@@ -592,7 +613,7 @@ PYBIND11_MODULE(_pybraw, m) {
         })
     ;
 
-    py::class_<IBlackmagicRawPipelineDevice,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDevice,py::nodelete>>(m, "IBlackmagicRawPipelineDevice")
+    py::class_<IBlackmagicRawPipelineDevice,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDevice,Releaser>>(m, "IBlackmagicRawPipelineDevice")
         .def("SetBestInstructionSet", &IBlackmagicRawPipelineDevice::SetBestInstructionSet)
         .def("SetInstructionSet", &IBlackmagicRawPipelineDevice::SetInstructionSet)
         .def("GetInstructionSet", [](IBlackmagicRawPipelineDevice& self) {
@@ -619,7 +640,7 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
-    py::class_<IBlackmagicRawPipelineDeviceIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDeviceIterator,py::nodelete>>(m, "IBlackmagicRawPipelineDeviceIterator")
+    py::class_<IBlackmagicRawPipelineDeviceIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDeviceIterator,Releaser>>(m, "IBlackmagicRawPipelineDeviceIterator")
         .def("Next", &IBlackmagicRawPipelineDeviceIterator::Next)
         .def("GetPipeline", [](IBlackmagicRawPipelineDeviceIterator& self) {
             BlackmagicRawPipeline pipeline = 0;
@@ -638,7 +659,7 @@ PYBIND11_MODULE(_pybraw, m) {
         })
     ;
 
-    py::class_<IBlackmagicRawFactory,IUnknown,std::unique_ptr<IBlackmagicRawFactory,py::nodelete>>(m, "IBlackmagicRawFactory")
+    py::class_<IBlackmagicRawFactory,IUnknown,std::unique_ptr<IBlackmagicRawFactory,Releaser>>(m, "IBlackmagicRawFactory")
         .def("CreateCodec", [](IBlackmagicRawFactory& self) {
             IBlackmagicRaw* codec = nullptr;
             HRESULT result = self.CreateCodec(&codec);

@@ -869,6 +869,20 @@ PYBIND11_MODULE(_pybraw, m) {
         })
     ;
 
+    py::class_<IBlackmagicRawOpenGLInteropHelper,IUnknown,std::unique_ptr<IBlackmagicRawOpenGLInteropHelper,Releaser>>(m, "IBlackmagicRawOpenGLInteropHelper")
+        .def("GetPreferredResourceFormat", [](IBlackmagicRawOpenGLInteropHelper& self) {
+            BlackmagicRawResourceFormat preferredFormat = 0;
+            HRESULT result = self.GetPreferredResourceFormat(&preferredFormat);
+            return std::make_tuple(result, preferredFormat);
+        })
+        .def("SetImage", [](IBlackmagicRawOpenGLInteropHelper& self, IBlackmagicRawProcessedImage* processedImage) {
+            uint32_t openGLTextureName = 0;
+            int32_t openGLTextureTarget = 0;
+            HRESULT result = self.SetImage(processedImage, &openGLTextureName, &openGLTextureTarget);
+            return std::make_tuple(result, openGLTextureName, openGLTextureTarget);
+        })
+    ;
+
     py::class_<IBlackmagicRawPipelineDevice,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDevice,Releaser>>(m, "IBlackmagicRawPipelineDevice")
         .def("SetBestInstructionSet", &IBlackmagicRawPipelineDevice::SetBestInstructionSet)
         .def("SetInstructionSet", &IBlackmagicRawPipelineDevice::SetInstructionSet)
@@ -882,6 +896,11 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetIndex(&deviceIndex);
             return std::make_tuple(result, deviceIndex);
         })
+        .def("GetName", [](IBlackmagicRawPipelineDevice& self) {
+            const char* name = nullptr;
+            HRESULT result = self.GetName(&name);
+            return std::make_tuple(result, name);
+        })
         .def("GetInterop", [](IBlackmagicRawPipelineDevice& self) {
             BlackmagicRawInterop interop = 0;
             HRESULT result = self.GetInterop(&interop);
@@ -893,7 +912,11 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetPipelineName(&pipelineName);
             return std::make_tuple(result, pipelineName);
         })
-        // TODO: Add missing bindings
+        .def("GetOpenGLInteropHelper", [](IBlackmagicRawPipelineDevice& self) {
+            IBlackmagicRawOpenGLInteropHelper* interopHelper = nullptr;
+            HRESULT result = self.GetOpenGLInteropHelper(&interopHelper);
+            return std::make_tuple(result, interopHelper);
+        })
     ;
 
     py::class_<IBlackmagicRawPipelineDeviceIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDeviceIterator,Releaser>>(m, "IBlackmagicRawPipelineDeviceIterator")

@@ -818,8 +818,23 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("SetFromDevice", &IBlackmagicRawConfiguration::SetFromDevice)
     ;
 
-    py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,Releaser>>(m, "IBlackmagicRawConfigurationEx")
+    py::class_<IBlackmagicRawResourceManager,IUnknown,std::unique_ptr<IBlackmagicRawResourceManager,Releaser>>(m, "IBlackmagicRawResourceManager")
         // TODO: Add missing bindings
+    ;
+
+    py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,Releaser>>(m, "IBlackmagicRawConfigurationEx")
+        .def("GetResourceManager", [](IBlackmagicRawConfigurationEx& self) {
+            IBlackmagicRawResourceManager* resourceManager = nullptr;
+            HRESULT result = self.GetResourceManager(&resourceManager);
+            return std::make_tuple(result, resourceManager);
+        })
+        .def("SetResourceManager", &IBlackmagicRawConfigurationEx::SetResourceManager)
+        .def("GetInstructionSet", [](IBlackmagicRawConfigurationEx& self) {
+            BlackmagicRawInstructionSet instructionSet = 0;
+            HRESULT result = self.GetInstructionSet(&instructionSet);
+            return std::make_tuple(result, instructionSet);
+        })
+        .def("SetInstructionSet", &IBlackmagicRawConfigurationEx::SetInstructionSet)
     ;
 
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,Releaser>>(m, "IBlackmagicRaw")

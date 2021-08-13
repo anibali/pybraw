@@ -6,28 +6,40 @@ from pybraw import _pybraw
 from .helpers import checked_result
 
 
+class CapturingCallback(_pybraw.BlackmagicRawCallback):
+    def ReadComplete(self, job, result, frame):
+        self.frame = frame
+
+    def ProcessComplete(self, job, result, processed_image):
+        self.processed_image = processed_image
+
+
+@pytest.fixture
+def callback(codec):
+    callback = CapturingCallback()
+    codec.SetCallback(callback)
+    return callback
+
+
+@pytest.fixture
+def frame(codec, clip, callback):
+    read_job = checked_result(clip.CreateJobReadFrame(12))
+    read_job.Submit()
+    read_job.Release()
+    codec.FlushJobs()
+    return callback.frame
+
+
 @pytest.mark.parametrize('format,max_val,is_planar,channels', [
     (_pybraw.blackmagicRawResourceFormatBGRAU8, 2**8, False, [2, 1, 0, 3]),
     (_pybraw.blackmagicRawResourceFormatRGBF32Planar, 1, True, [0, 1, 2]),
     (_pybraw.blackmagicRawResourceFormatRGBU16Planar, 2**16, True, [0, 1, 2]),
 ])
-def test_SetResourceFormat(codec, clip, format, max_val, is_planar, channels):
-    class MyCallback(_pybraw.BlackmagicRawCallback):
-        def ReadComplete(self, job, result, frame):
-            checked_result(frame.SetResourceFormat(format))
-            process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
-            process_job.Submit()
-            process_job.Release()
-
-        def ProcessComplete(self, job, result, processed_image):
-            self.processed_image = processed_image
-
-    # NOTE: SetCallback _must_ be called before CreateJobReadFrame
-    callback = MyCallback()
-    codec.SetCallback(callback)
-    read_job = checked_result(clip.CreateJobReadFrame(12))
-    read_job.Submit()
-    read_job.Release()
+def test_SetResourceFormat(frame, codec, callback, format, max_val, is_planar, channels):
+    checked_result(frame.SetResourceFormat(format))
+    process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
+    process_job.Submit()
+    process_job.Release()
     codec.FlushJobs()
 
     resource_type = checked_result(callback.processed_image.GetResourceType())
@@ -44,23 +56,11 @@ def test_SetResourceFormat(codec, clip, format, max_val, is_planar, channels):
     assert_allclose(np_image[100, 200], expected, atol=1 / 255)
 
 
-def test_SetResolutionScale(codec, clip):
-    class MyCallback(_pybraw.BlackmagicRawCallback):
-        def ReadComplete(self, job, result, frame):
-            checked_result(frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter))
-            process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
-            process_job.Submit()
-            process_job.Release()
-
-        def ProcessComplete(self, job, result, processed_image):
-            self.processed_image = processed_image
-
-    # NOTE: SetCallback _must_ be called before CreateJobReadFrame
-    callback = MyCallback()
-    codec.SetCallback(callback)
-    read_job = checked_result(clip.CreateJobReadFrame(12))
-    read_job.Submit()
-    read_job.Release()
+def test_SetResolutionScale(frame, codec, callback):
+    checked_result(frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter))
+    process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
+    process_job.Submit()
+    process_job.Release()
     codec.FlushJobs()
 
     # Check that the resolution is one quarter of the original DCI full frame 4K.
@@ -74,18 +74,8 @@ def test_SetResolutionScale(codec, clip):
     # pil_image.show()
 
 
-def test_CloneFrameProcessingAttributes(codec, clip):
-    class MyCallback(_pybraw.BlackmagicRawCallback):
-        def ReadComplete(self, job, result, frame):
-            attributes = checked_result(frame.CloneFrameProcessingAttributes())
-            assert isinstance(attributes, _pybraw.IBlackmagicRawFrameProcessingAttributes)
-            self.iso = checked_result(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
-
-    callback = MyCallback()
-    codec.SetCallback(callback)
-    read_job = checked_result(clip.CreateJobReadFrame(12))
-    read_job.Submit()
-    read_job.Release()
-    codec.FlushJobs()
-
-    assert callback.iso == 400
+def test_CloneFrameProcessingAttributes(frame):
+    attributes = checked_result(frame.CloneFrameProcessingAttributes())
+    assert isinstance(attributes, _pybraw.IBlackmagicRawFrameProcessingAttributes)
+    iso = checked_result(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
+    assert iso == 400

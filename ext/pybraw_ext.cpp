@@ -53,10 +53,13 @@ public:
     BlackmagicRawCallback() {
         AddRef();
     }
+
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) { return E_NOTIMPL; }
+
     virtual ULONG STDMETHODCALLTYPE AddRef(void) {
         return m_refCount.fetch_add(1) + 1;
     }
+
     virtual ULONG STDMETHODCALLTYPE Release(void) {
         ULONG oldRefCount = m_refCount.fetch_sub(1);
         assert(oldRefCount > 0);
@@ -66,21 +69,6 @@ public:
         return oldRefCount - 1;
     }
 
-    // Default implementations of callback functions.
-    // Subclasses can selectively override these.
-    virtual void ReadComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawFrame* frame) {}
-    virtual void ProcessComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawProcessedImage* processedImage) {}
-    virtual void DecodeComplete(IBlackmagicRawJob* job, HRESULT result) {}
-    virtual void TrimProgress(IBlackmagicRawJob* job, float progress) {}
-    virtual void TrimComplete(IBlackmagicRawJob* job, HRESULT result) {}
-    virtual void SidecarMetadataParseWarning(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) {}
-    virtual void SidecarMetadataParseError(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) {}
-    virtual void PreparePipelineComplete(void* userData, HRESULT result) {}
-};
-
-
-class PyBrawCallback : public BlackmagicRawCallback {
-public:
     void ReadComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawFrame* frame) override {
         py::gil_scoped_acquire gil;
         py::function pyfunc = py::get_override(this, "ReadComplete");
@@ -93,6 +81,7 @@ public:
             );
         }
     }
+
     void ProcessComplete(IBlackmagicRawJob* job, HRESULT result, IBlackmagicRawProcessedImage* processedImage) override {
         py::gil_scoped_acquire gil;
         py::function pyfunc = py::get_override(this, "ProcessComplete");
@@ -105,15 +94,19 @@ public:
             );
         }
     }
+
     void DecodeComplete(IBlackmagicRawJob* job, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, DecodeComplete, job, result);
     }
+
     void TrimProgress(IBlackmagicRawJob* job, float progress) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, TrimProgress, job, progress);
     }
+
     void TrimComplete(IBlackmagicRawJob* job, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, TrimComplete, job, result);
     }
+
     void SidecarMetadataParseWarning(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
         py::gil_scoped_acquire gil;
         py::function pyfunc = py::get_override(this, "SidecarMetadataParseWarning");
@@ -127,6 +120,7 @@ public:
             );
         }
     }
+
     void SidecarMetadataParseError(IBlackmagicRawClip* clip, const char* fileName, uint32_t lineNumber, const char* info) override {
         py::gil_scoped_acquire gil;
         py::function pyfunc = py::get_override(this, "SidecarMetadataParseError");
@@ -140,6 +134,7 @@ public:
             );
         }
     }
+
     void PreparePipelineComplete(void* userData, HRESULT result) override {
         PYBIND11_OVERRIDE(void, BlackmagicRawCallback, PreparePipelineComplete, userData, result);
     }
@@ -485,7 +480,7 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("PreparePipelineComplete", &IBlackmagicRawCallback::PreparePipelineComplete)
     ;
 
-    py::class_<BlackmagicRawCallback,PyBrawCallback,IBlackmagicRawCallback,std::unique_ptr<BlackmagicRawCallback,Releaser>>(m, "BlackmagicRawCallback")
+    py::class_<BlackmagicRawCallback,IBlackmagicRawCallback,std::unique_ptr<BlackmagicRawCallback,Releaser>>(m, "BlackmagicRawCallback")
         .def(py::init<>())
     ;
 

@@ -59,7 +59,7 @@ def main(args):
 
     resource_type = checked_result(callback.processed_image.GetResourceType())
     assert resource_type == _pybraw.blackmagicRawResourceTypeBufferCPU
-    np_image = callback.processed_image.numpy()
+    np_image = callback.processed_image.to_py()
     del callback.processed_image
 
     pil_image = Image.fromarray(np_image[..., :3])

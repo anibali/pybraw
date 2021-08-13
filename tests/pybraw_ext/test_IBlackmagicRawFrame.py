@@ -46,7 +46,7 @@ def test_SetResourceFormat(frame, codec, callback, format, max_val, is_planar, c
     assert resource_type == _pybraw.blackmagicRawResourceTypeBufferCPU
     resource_format = checked_result(callback.processed_image.GetResourceFormat())
     assert resource_format == format
-    np_image = callback.processed_image.numpy()
+    np_image = callback.processed_image.to_py()
     del callback.processed_image
 
     np_image = np_image / max_val
@@ -70,7 +70,7 @@ def test_SetResolutionScale(frame, codec, callback):
     assert height == 540
 
     # from PIL import Image
-    # pil_image = Image.fromarray(callback.processed_image.numpy()[..., :3])
+    # pil_image = Image.fromarray(callback.processed_image.to_py()[..., :3])
     # pil_image.show()
 
 

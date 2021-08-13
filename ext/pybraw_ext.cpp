@@ -601,7 +601,7 @@ PYBIND11_MODULE(_pybraw, m) {
 //            HRESULT result = self.GetResource(&resource);
 //            return std::make_tuple(result, (size_t)resource);
 //        })
-        .def("numpy", [](IBlackmagicRawProcessedImage& self) -> py::array {
+        .def("to_py", [](IBlackmagicRawProcessedImage& self) -> py::array {
             HRESULT result;
             BlackmagicRawResourceType type = 0;
             result = self.GetResourceType(&type);

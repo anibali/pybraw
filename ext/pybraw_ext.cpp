@@ -406,6 +406,15 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawFrameProcessingAttribute>(m, "_BlackmagicRawFrameProcessingAttribute")
+        .value("blackmagicRawFrameProcessingAttributeWhiteBalanceKelvin", blackmagicRawFrameProcessingAttributeWhiteBalanceKelvin)
+        .value("blackmagicRawFrameProcessingAttributeWhiteBalanceTint", blackmagicRawFrameProcessingAttributeWhiteBalanceTint)
+        .value("blackmagicRawFrameProcessingAttributeExposure", blackmagicRawFrameProcessingAttributeExposure)
+        .value("blackmagicRawFrameProcessingAttributeISO", blackmagicRawFrameProcessingAttributeISO)
+        .value("blackmagicRawFrameProcessingAttributeAnalogGain", blackmagicRawFrameProcessingAttributeAnalogGain)
+        .export_values()
+    ;
+
     py::enum_<_BlackmagicRawInterop>(m, "_BlackmagicRawInterop")
         .value("blackmagicRawInteropNone", blackmagicRawInteropNone)
         .value("blackmagicRawInteropOpenGL", blackmagicRawInteropOpenGL)
@@ -500,7 +509,13 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,Releaser>>(m, "IBlackmagicRawFrameProcessingAttributes")
-        // TODO: Add missing bindings
+        .def("GetFrameAttribute", [](IBlackmagicRawFrameProcessingAttributes& self, BlackmagicRawFrameProcessingAttribute attribute) {
+            Variant value;
+            VariantInit(&value);
+            HRESULT result = self.GetFrameAttribute(attribute, &value);
+            return std::make_tuple(result, value);
+        })
+        .def("SetFrameAttribute", &IBlackmagicRawFrameProcessingAttributes::SetFrameAttribute)
     ;
 
     py::class_<IBlackmagicRawFrame,IUnknown,std::unique_ptr<IBlackmagicRawFrame,Releaser>>(m, "IBlackmagicRawFrame")
@@ -520,6 +535,11 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, iterator);
         })
         // TODO: Add missing bindings
+        .def("CloneFrameProcessingAttributes", [](IBlackmagicRawFrame& self) {
+            IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes = nullptr;
+            HRESULT result = self.CloneFrameProcessingAttributes(&frameProcessingAttributes);
+            return std::make_tuple(result, frameProcessingAttributes);
+        })
         .def("SetResolutionScale", &IBlackmagicRawFrame::SetResolutionScale)
         .def("GetResolutionScale", [](IBlackmagicRawFrame& self) {
             BlackmagicRawResolutionScale resolutionScale = 0;

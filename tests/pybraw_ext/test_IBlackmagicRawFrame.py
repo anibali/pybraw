@@ -14,7 +14,7 @@ from .helpers import checked_result
 def test_SetResourceFormat(codec, clip, format, max_val, is_planar, channels):
     class MyCallback(_pybraw.BlackmagicRawCallback):
         def ReadComplete(self, job, result, frame):
-            frame.SetResourceFormat(format)
+            checked_result(frame.SetResourceFormat(format))
             process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
             process_job.Submit()
             process_job.Release()
@@ -47,7 +47,7 @@ def test_SetResourceFormat(codec, clip, format, max_val, is_planar, channels):
 def test_SetResolutionScale(codec, clip):
     class MyCallback(_pybraw.BlackmagicRawCallback):
         def ReadComplete(self, job, result, frame):
-            frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter)
+            checked_result(frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter))
             process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
             process_job.Submit()
             process_job.Release()
@@ -72,3 +72,20 @@ def test_SetResolutionScale(codec, clip):
     # from PIL import Image
     # pil_image = Image.fromarray(callback.processed_image.numpy()[..., :3])
     # pil_image.show()
+
+
+def test_CloneFrameProcessingAttributes(codec, clip):
+    class MyCallback(_pybraw.BlackmagicRawCallback):
+        def ReadComplete(self, job, result, frame):
+            attributes = checked_result(frame.CloneFrameProcessingAttributes())
+            assert isinstance(attributes, _pybraw.IBlackmagicRawFrameProcessingAttributes)
+            self.iso = checked_result(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
+
+    callback = MyCallback()
+    codec.SetCallback(callback)
+    read_job = checked_result(clip.CreateJobReadFrame(12))
+    read_job.Submit()
+    read_job.Release()
+    codec.FlushJobs()
+
+    assert callback.iso == 400

@@ -58,3 +58,9 @@ def test_SetClipAttribute(clip):
     checked_result(attributes.SetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel, value))
     black_level = checked_result(attributes.GetClipAttribute(_pybraw.blackmagicRawClipProcessingAttributeToneCurveBlackLevel))
     assert black_level.to_py() == 0.25
+
+
+def test_GetPost3DLUT(clip):
+    attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
+    lut = checked_result(attributes.GetPost3DLUT())
+    assert lut == None

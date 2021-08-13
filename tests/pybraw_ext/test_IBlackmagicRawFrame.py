@@ -79,3 +79,29 @@ def test_CloneFrameProcessingAttributes(frame):
     assert isinstance(attributes, _pybraw.IBlackmagicRawFrameProcessingAttributes)
     iso = checked_result(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
     assert iso == 400
+
+
+def test_GetMetadataIterator(frame):
+    iterator = checked_result(frame.GetMetadataIterator())
+    metadata = {}
+    while True:
+        result, key = iterator.GetKey()
+        if result == _pybraw.E_FAIL:
+            break
+        assert result == _pybraw.S_OK
+        metadata[key] = checked_result(iterator.GetData()).to_py()
+        result = iterator.Next()
+        assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
+    assert metadata['white_balance_kelvin'] == 5600
+    assert_allclose(metadata['sensor_rate'], np.array([25, 1]))
+
+
+def test_GetMetadata(frame):
+    white_balance = checked_result(frame.GetMetadata('white_balance_kelvin'))
+    assert white_balance.to_py() == 5600
+
+
+def test_SetMetadata(frame):
+    checked_result(frame.SetMetadata('white_balance_kelvin', _pybraw.VariantCreateU32(2800)))
+    white_balance = checked_result(frame.GetMetadata('white_balance_kelvin'))
+    assert white_balance.to_py() == 2800

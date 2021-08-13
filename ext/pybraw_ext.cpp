@@ -473,7 +473,8 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IUnknown>(m, "IUnknown")
-        // TODO: Add missing bindings
+        // Instead of binding QueryInterface directly, we add as_IBlackmagicXXX methods where
+        // appropriate.
         .def("AddRef", &IUnknown::AddRef)
         .def("Release", &IUnknown::Release)
     ;
@@ -497,6 +498,20 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
+    py::class_<IBlackmagicRawPost3DLUT,IUnknown,std::unique_ptr<IBlackmagicRawPost3DLUT,Releaser>>(m, "IBlackmagicRawPost3DLUT")
+        .def("GetName", [](IBlackmagicRawPost3DLUT& self) {
+            const char* name = nullptr;
+            HRESULT result = self.GetName(&name);
+            return std::make_tuple(result, name);
+        })
+        .def("GetTitle", [](IBlackmagicRawPost3DLUT& self) {
+            const char* title = nullptr;
+            HRESULT result = self.GetTitle(&title);
+            return std::make_tuple(result, title);
+        })
+        // TODO: Add missing bindings
+    ;
+
     py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,Releaser>>(m, "IBlackmagicRawClipProcessingAttributes")
         .def("GetClipAttribute", [](IBlackmagicRawClipProcessingAttributes& self, BlackmagicRawClipProcessingAttribute attribute) {
             Variant value;
@@ -505,7 +520,11 @@ PYBIND11_MODULE(_pybraw, m) {
             return std::make_tuple(result, value);
         })
         .def("SetClipAttribute", &IBlackmagicRawClipProcessingAttributes::SetClipAttribute)
-        // TODO: Add missing bindings
+        .def("GetPost3DLUT", [](IBlackmagicRawClipProcessingAttributes& self) {
+            IBlackmagicRawPost3DLUT* lut = nullptr;
+            HRESULT result = self.GetPost3DLUT(&lut);
+            return std::make_tuple(result, lut);
+        })
     ;
 
     py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,Releaser>>(m, "IBlackmagicRawFrameProcessingAttributes")
@@ -534,7 +553,13 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetMetadataIterator(&iterator);
             return std::make_tuple(result, iterator);
         })
-        // TODO: Add missing bindings
+        .def("GetMetadata", [](IBlackmagicRawFrame& self, const char* key) {
+            Variant value;
+            VariantInit(&value);
+            HRESULT result = self.GetMetadata(key, &value);
+            return std::make_tuple(result, value);
+        })
+        .def("SetMetadata", &IBlackmagicRawFrame::SetMetadata)
         .def("CloneFrameProcessingAttributes", [](IBlackmagicRawFrame& self) {
             IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes = nullptr;
             HRESULT result = self.CloneFrameProcessingAttributes(&frameProcessingAttributes);
@@ -678,7 +703,6 @@ PYBIND11_MODULE(_pybraw, m) {
         // TODO: Add missing bindings
     ;
 
-    // https://pybind11.readthedocs.io/en/stable/advanced/classes.html#non-public-destructors
     py::class_<IBlackmagicRawClip,IUnknown,std::unique_ptr<IBlackmagicRawClip,Releaser>>(m, "IBlackmagicRawClip")
         .def("GetWidth", [](IBlackmagicRawClip& self) {
             uint32_t width = 0;

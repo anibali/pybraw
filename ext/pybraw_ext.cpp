@@ -40,6 +40,11 @@ public:
 };
 
 
+struct Resource {
+    void* data;
+};
+
+
 // Concrete subclass of IBlackmagicRawCallback which provides an implementation of reference
 // counting and placeholders for each of the callback functions.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
@@ -302,6 +307,11 @@ PYBIND11_MODULE(_pybraw, m) {
 
     m.def("SafeArrayCreateFromNumpy", &convert_numpy_to_safe_array);
 
+    m.def("CreateResourceNone", []() {
+        Resource resource = {};
+        return resource;
+    });
+
     // This function is currently used for testing purposes only.
     m.def("_IUnknownWeakref", [](IUnknown* obj) {
         return obj;
@@ -485,6 +495,9 @@ PYBIND11_MODULE(_pybraw, m) {
         }, "Return a copy of this Variant as a Python object.")
     ;
 
+    py::class_<Resource>(m, "Resource")
+    ;
+
     py::class_<IUnknown>(m, "IUnknown")
         // Instead of binding QueryInterface directly, we add as_IBlackmagicXXX methods where
         // appropriate.
@@ -518,9 +531,9 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetBitStreamSizeBytes(frameIndex, &bitStreamSizeBytes);
             return std::make_tuple(result, bitStreamSizeBytes);
         })
-        .def("CreateJobReadFrame", [](IBlackmagicRawClipEx& self, uint64_t frameIndex, void* bitStream, uint32_t bitStreamSizeBytes) {
+        .def("CreateJobReadFrame", [](IBlackmagicRawClipEx& self, uint64_t frameIndex, Resource bitStream, uint32_t bitStreamSizeBytes) {
             IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobReadFrame(frameIndex, bitStream, bitStreamSizeBytes, &job);
+            HRESULT result = self.CreateJobReadFrame(frameIndex, bitStream.data, bitStreamSizeBytes, &job);
             return std::make_tuple(result, job);
         })
         .def("QueryTimecodeInfo", [](IBlackmagicRawClipEx& self) {
@@ -542,7 +555,27 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetTitle(&title);
             return std::make_tuple(result, title);
         })
-        // TODO: Add missing bindings
+        .def("GetSize", [](IBlackmagicRawPost3DLUT& self) {
+            uint32_t size = 0;
+            HRESULT result = self.GetSize(&size);
+            return std::make_tuple(result, size);
+        })
+        .def("GetResourceGPU", [](IBlackmagicRawPost3DLUT& self, void* context, void* commandQueue) {
+            Resource resource = {};
+            BlackmagicRawResourceType type = 0;
+            HRESULT result = self.GetResourceGPU(context, commandQueue, &type, &resource.data);
+            return std::make_tuple(result, type, resource);
+        })
+        .def("GetResourceCPU", [](IBlackmagicRawPost3DLUT& self) {
+            Resource resource = {};
+            HRESULT result = self.GetResourceCPU(&resource.data);
+            return std::make_tuple(result, resource);
+        })
+        .def("GetResourceSizeBytes", [](IBlackmagicRawPost3DLUT& self) {
+            uint32_t sizeBytes = 0;
+            HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
+            return std::make_tuple(result, sizeBytes);
+        })
     ;
 
     py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,Releaser>>(m, "IBlackmagicRawClipProcessingAttributes")
@@ -629,11 +662,11 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetHeight(&height);
             return std::make_tuple(result, height);
         })
-//        .def("GetResource", [](IBlackmagicRawProcessedImage& self) {
-//            void* resource = nullptr;
-//            HRESULT result = self.GetResource(&resource);
-//            return std::make_tuple(result, (size_t)resource);
-//        })
+        .def("GetResource", [](IBlackmagicRawProcessedImage& self) {
+            Resource resource = {};
+            HRESULT result = self.GetResource(&resource.data);
+            return std::make_tuple(result, resource);
+        })
         .def("to_py", [](IBlackmagicRawProcessedImage& self) -> py::array {
             HRESULT result;
             BlackmagicRawResourceType type = 0;
@@ -876,12 +909,12 @@ PYBIND11_MODULE(_pybraw, m) {
 
     py::class_<IBlackmagicRawResourceManager,IUnknown,std::unique_ptr<IBlackmagicRawResourceManager,Releaser>>(m, "IBlackmagicRawResourceManager")
         .def("CreateResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, uint32_t sizeBytes, BlackmagicRawResourceType type, BlackmagicRawResourceUsage usage) {
-            void* resource = nullptr;
-            HRESULT result = self.CreateResource(context, commandQueue, sizeBytes, type, usage, &resource);
+            Resource resource = {};
+            HRESULT result = self.CreateResource(context, commandQueue, sizeBytes, type, usage, &resource.data);
             return std::make_tuple(result, resource);
         })
-        .def("ReleaseResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, void* resource, BlackmagicRawResourceType type) {
-            HRESULT result = self.ReleaseResource(context, commandQueue, resource, type);
+        .def("ReleaseResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType type) {
+            HRESULT result = self.ReleaseResource(context, commandQueue, resource.data, type);
             return result;
         })
         // TODO: Add missing bindings
@@ -903,8 +936,8 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawManualDecoderFlow1,IUnknown,std::unique_ptr<IBlackmagicRawManualDecoderFlow1,Releaser>>(m, "IBlackmagicRawManualDecoderFlow1")
-        .def("PopulateFrameStateBuffer", [](IBlackmagicRawManualDecoderFlow1& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, void* frameState, uint32_t frameStateSizeBytes) {
-            HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState, frameStateSizeBytes);
+        .def("PopulateFrameStateBuffer", [](IBlackmagicRawManualDecoderFlow1& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, Resource frameState, uint32_t frameStateSizeBytes) {
+            HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState.data, frameStateSizeBytes);
             return result;
         })
         .def("GetFrameStateSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self) {
@@ -912,29 +945,29 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.GetFrameStateSizeBytes(&frameStateSizeBytes);
             return std::make_tuple(result, frameStateSizeBytes);
         })
-        .def("GetDecodedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, void* frameStateBufferCPU) {
+        .def("GetDecodedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
             uint32_t decodedSizeBytes = 0;
-            HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU, &decodedSizeBytes);
+            HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU.data, &decodedSizeBytes);
             return std::make_tuple(result, decodedSizeBytes);
         })
-        .def("GetProcessedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, void* frameStateBufferCPU) {
+        .def("GetProcessedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
             uint32_t processedSizeBytes = 0;
-            HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU, &processedSizeBytes);
+            HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU.data, &processedSizeBytes);
             return std::make_tuple(result, processedSizeBytes);
         })
-        .def("GetPost3DLUTSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, void* frameStateBufferCPU) {
+        .def("GetPost3DLUTSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
             uint32_t post3DLUTSizeBytes = 0;
-            HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU, &post3DLUTSizeBytes);
+            HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU.data, &post3DLUTSizeBytes);
             return std::make_tuple(result, post3DLUTSizeBytes);
         })
-        .def("CreateJobDecode", [](IBlackmagicRawManualDecoderFlow1& self, void* frameStateBufferCPU, void* bitStreamBufferCPU, void* decodedBufferCPU) {
+        .def("CreateJobDecode", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource bitStreamBufferCPU, Resource decodedBufferCPU) {
             IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobDecode(frameStateBufferCPU, bitStreamBufferCPU, decodedBufferCPU, &job);
+            HRESULT result = self.CreateJobDecode(frameStateBufferCPU.data, bitStreamBufferCPU.data, decodedBufferCPU.data, &job);
             return std::make_tuple(result, job);
         })
-        .def("CreateJobProcess", [](IBlackmagicRawManualDecoderFlow1& self, void* frameStateBufferCPU, void* decodedBufferCPU, void* processedBufferCPU, void* post3DLUTBufferCPU) {
+        .def("CreateJobProcess", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource decodedBufferCPU, Resource processedBufferCPU, Resource post3DLUTBufferCPU) {
             IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobProcess(frameStateBufferCPU, decodedBufferCPU, processedBufferCPU, post3DLUTBufferCPU, &job);
+            HRESULT result = self.CreateJobProcess(frameStateBufferCPU.data, decodedBufferCPU.data, processedBufferCPU.data, post3DLUTBufferCPU.data, &job);
             return std::make_tuple(result, job);
         })
     ;

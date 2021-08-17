@@ -182,7 +182,7 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
     if clip_post_3d_lut is not None:
         post_3d_lut_buffer_cpu = checked_result(clip_post_3d_lut.GetResourceCPU())
     else:
-        post_3d_lut_buffer_cpu = None
+        post_3d_lut_buffer_cpu = _pybraw.CreateResourceNone()
     buffer_manager_pool = [
         BufferManagerFlow1(resource_manager, manual_decoder, post_3d_lut_buffer_cpu)
         for _ in range(job_counter.max_jobs)

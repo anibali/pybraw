@@ -1,13 +1,11 @@
 import argparse
 import sys
 from dataclasses import dataclass
-from threading import Lock
-from time import sleep
+from threading import Condition
 
 from pybraw import _pybraw
 
 RESOURCE_FORMAT = _pybraw.blackmagicRawResourceFormatRGBAU8
-MAX_JOBS_IN_FLIGHT = 2
 
 
 def argument_parser():
@@ -17,22 +15,31 @@ def argument_parser():
     return parser
 
 
-class AtomicInt:
-    def __init__(self, value: int = 0):
-        self.value = value
-        self.lock = Lock()
+class JobCounter:
+    def __init__(self, max_jobs, cur_jobs: int = 0):
+        self._condition = Condition()
+        self._max_jobs = max_jobs
+        self._cur_jobs = cur_jobs
 
-    def fetch_add(self):
-        with self.lock:
-            old_value = self.value
-            self.value += 1
-            return old_value
+    @property
+    def max_jobs(self):
+        return self._max_jobs
 
-    def fetch_sub(self):
-        with self.lock:
-            old_value = self.value
-            self.value -= 1
-            return old_value
+    def start_job(self):
+        with self._condition:
+            while self._cur_jobs >= self._max_jobs:
+                self._condition.wait()
+            self._cur_jobs += 1
+
+    def end_job(self):
+        with self._condition:
+            self._cur_jobs -= 1
+            self._condition.notify()
+
+    def wait_while_jobs_running(self):
+        with self._condition:
+            while self._cur_jobs > 0:
+                self._condition.wait()
 
 
 def checked_result(return_values, expected_result=_pybraw.S_OK):
@@ -117,9 +124,9 @@ class UserData:
 
 
 class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
-    def __init__(self, jobs_in_flight):
+    def __init__(self, job_counter: JobCounter):
         super().__init__()
-        self.jobs_in_flight = jobs_in_flight
+        self.job_counter = job_counter
 
     def ReadComplete(self, read_job, result, frame):
         user_data: UserData = checked_result(read_job.pop_py_user_data())
@@ -128,7 +135,7 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
             print(f'Read frame index: {user_data.frame_index}')
         else:
             print(f'Failed to read frame index: {user_data.frame_index}')
-            self.jobs_in_flight.fetch_sub()
+            self.job_counter.end_job()
             return
 
         checked_result(frame.SetResourceFormat(RESOURCE_FORMAT))
@@ -147,7 +154,7 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
             print(f'Decoded frame index: {user_data.frame_index}')
         else:
             print(f'Failed to decode frame index: {user_data.frame_index}')
-            self.jobs_in_flight.fetch_sub()
+            self.job_counter.end_job()
             return
 
         buffer_manager = user_data.buffer_manager
@@ -164,10 +171,10 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         else:
             print(f'Failed to process frame index: {user_data.frame_index}')
 
-        self.jobs_in_flight.fetch_sub()
+        self.job_counter.end_job()
 
 
-def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manual_decoder, jobs_in_flight):
+def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manual_decoder, job_counter: JobCounter):
     clip_ex = checked_result(clip.as_IBlackmagicRawClipEx())
     clip_processing_attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
     frame_count = checked_result(clip.GetFrameCount())
@@ -178,22 +185,18 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
         post_3d_lut_buffer_cpu = None
     buffer_manager_pool = [
         BufferManagerFlow1(resource_manager, manual_decoder, post_3d_lut_buffer_cpu)
-        for _ in range(MAX_JOBS_IN_FLIGHT)
+        for _ in range(job_counter.max_jobs)
     ]
     for frame_index in range(frame_count):
-        while jobs_in_flight.value >= MAX_JOBS_IN_FLIGHT:
-            sleep(0.001)
-
-        buffer_manager = buffer_manager_pool[frame_index % MAX_JOBS_IN_FLIGHT]
+        job_counter.start_job()
+        buffer_manager = buffer_manager_pool[frame_index % len(buffer_manager_pool)]
         read_job = buffer_manager.create_read_job(clip_ex, frame_index)
         user_data = UserData(buffer_manager, frame_index)
         checked_result(read_job.put_py_user_data(user_data))
         checked_result(read_job.Submit())
-        jobs_in_flight.fetch_add()
         read_job.Release()
 
-    while jobs_in_flight.value > 0:
-        sleep(0.001)
+    job_counter.wait_while_jobs_running()
 
 
 def main(args):
@@ -205,10 +208,10 @@ def main(args):
     resource_manager = checked_result(configuration_ex.GetResourceManager())
     manual_decoder = checked_result(codec.as_IBlackmagicRawManualDecoderFlow1())
     clip = checked_result(codec.OpenClip(opts.input))
-    jobs_in_flight = AtomicInt()
-    callback = CameraCodecCallback(jobs_in_flight)
+    job_counter = JobCounter(max_jobs=2)
+    callback = CameraCodecCallback(job_counter)
     checked_result(codec.SetCallback(callback))
-    process_clip_manual(clip, resource_manager, manual_decoder, jobs_in_flight)
+    process_clip_manual(clip, resource_manager, manual_decoder, job_counter)
     codec.FlushJobs()
 
 

@@ -2,7 +2,13 @@ import numpy as np
 from numpy.testing import assert_allclose
 from pybraw import _pybraw
 
-from .helpers import checked_result
+from .helpers import checked_result, releases_last_reference
+
+
+def test_automatic_release(codec, sample_filename):
+    clip = checked_result(codec.OpenClip(sample_filename))
+    with releases_last_reference(clip):
+        del clip
 
 
 def test_GetWidth(clip):

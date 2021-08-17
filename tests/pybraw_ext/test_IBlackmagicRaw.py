@@ -1,6 +1,12 @@
 from pybraw import _pybraw
 
-from .helpers import checked_result
+from .helpers import checked_result, releases_last_reference
+
+
+def test_automatic_release(factory):
+    codec = checked_result(factory.CreateCodec())
+    with releases_last_reference(codec):
+        del codec
 
 
 def test_GetResourceManager(codec):

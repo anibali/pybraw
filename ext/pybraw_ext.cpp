@@ -302,6 +302,11 @@ PYBIND11_MODULE(_pybraw, m) {
 
     m.def("SafeArrayCreateFromNumpy", &convert_numpy_to_safe_array);
 
+    // This function is currently used for testing purposes only.
+    m.def("_IUnknownWeakref", [](IUnknown* obj) {
+        return obj;
+    }, py::return_value_policy::reference);
+
     // HRESULT constants.
     m.attr("S_OK") = py::int_(S_OK);
     m.attr("S_FALSE") = py::int_(S_FALSE);

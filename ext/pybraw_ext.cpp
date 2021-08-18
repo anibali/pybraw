@@ -328,6 +328,12 @@ PYBIND11_MODULE(_pybraw, m) {
         return resource;
     });
 
+    m.def("CreateResourceFromIntPointer", [](size_t int_pointer) {
+        Resource resource = {};
+        resource.data = (void*)int_pointer;
+        return resource;
+    });
+
     // This function is currently used for testing purposes only.
     m.def("_IUnknownWeakref", [](IUnknown* obj) {
         return obj;
@@ -512,6 +518,9 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<Resource>(m, "Resource")
+        .def("to_py_nocopy", [](Resource& self, size_t size_bytes) -> py::array {
+            return py::array_t<uint8_t>({size_bytes}, {sizeof(uint8_t)}, ((uint8_t*)self.data), py::none());
+        })
     ;
 
     py::class_<IUnknown>(m, "IUnknown")

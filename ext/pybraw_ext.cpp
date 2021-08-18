@@ -897,7 +897,14 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,Releaser>>(m, "IBlackmagicRawConfiguration")
-        // TODO: Add missing bindings
+        .def("SetPipeline", &IBlackmagicRawConfiguration::SetPipeline)
+        .def("GetPipeline", [](IBlackmagicRawConfiguration& self) {
+            BlackmagicRawPipeline pipeline = 0;
+            void* pipelineContextOut = nullptr;
+            void* pipelineCommandQueueOut = nullptr;
+            HRESULT result = self.GetPipeline(&pipeline, &pipelineContextOut, &pipelineCommandQueueOut);
+            return std::make_tuple(result, pipeline, pipelineContextOut, pipelineCommandQueueOut);
+        })
         .def("IsPipelineSupported", [](IBlackmagicRawConfiguration& self, BlackmagicRawPipeline pipeline) {
             bool pipelineSupported = 0;
             HRESULT result = self.IsPipelineSupported(pipeline, &pipelineSupported);

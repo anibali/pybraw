@@ -334,6 +334,16 @@ PYBIND11_MODULE(_pybraw, m) {
         return resource;
     });
 
+    m.def("PointerCTypesToPyBind", [](py::object p) {
+        auto ctypes = py::module::import("ctypes");
+        if(py::isinstance(p, ctypes.attr("c_void_p"))) {
+            PyObject* int_pointer = PyObject_GetAttr(p.ptr(), PyUnicode_FromString("value"));
+            return PyLong_AsVoidPtr(int_pointer);
+        } else {
+            throw std::invalid_argument("expected argument to be a c_void_p");
+        }
+    });
+
     // This function is currently used for testing purposes only.
     m.def("_IUnknownWeakref", [](IUnknown* obj) {
         return obj;

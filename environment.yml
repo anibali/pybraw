@@ -8,3 +8,5 @@ dependencies:
   - termcolor=1.1.0
   - pytest=6.2.4
   - conda-forge::pytest-lazy-fixture=0.6.3
+  - pytorch::pytorch=1.9.0
+  - nvidia::cudatoolkit=11.1

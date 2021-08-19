@@ -328,9 +328,9 @@ PYBIND11_MODULE(_pybraw, m) {
         return resource;
     });
 
-    m.def("CreateResourceFromIntPointer", [](size_t int_pointer) {
+    m.def("CreateResourceFromIntPointer", [](uintptr_t int_pointer) {
         Resource resource = {};
-        resource.data = (void*)int_pointer;
+        resource.data = reinterpret_cast<void*>(int_pointer);
         return resource;
     });
 

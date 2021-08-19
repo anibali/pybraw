@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 from pybraw import _pybraw
+from pytest_lazyfixture import lazy_fixture
 
 from .helpers import checked_result, releases_last_reference
 
@@ -75,9 +77,13 @@ def test_CloneClipProcessingAttributes(clip):
     assert gamut.to_py() == 'Blackmagic Design'
 
 
-def test_GetSidecarFileAttached(clip):
-    is_attached = checked_result(clip.GetSidecarFileAttached())
-    assert is_attached == False
+@pytest.mark.parametrize('cur_clip,expected', [
+    (lazy_fixture('clip'), False),
+    (lazy_fixture('bw_clip'), True),
+])
+def test_GetSidecarFileAttached(cur_clip, expected):
+    is_attached = checked_result(cur_clip.GetSidecarFileAttached())
+    assert is_attached == expected
 
 
 def test_GetClipAttribute(clip):
@@ -94,7 +100,14 @@ def test_SetClipAttribute(clip):
     assert black_level.to_py() == 0.25
 
 
-def test_GetPost3DLUT(clip):
-    attributes = checked_result(clip.as_IBlackmagicRawClipProcessingAttributes())
+@pytest.mark.parametrize('cur_clip,lut_size', [
+    (lazy_fixture('clip'), None),
+    (lazy_fixture('bw_clip'), 17),
+])
+def test_GetPost3DLUT(cur_clip, lut_size):
+    attributes = checked_result(cur_clip.as_IBlackmagicRawClipProcessingAttributes())
     lut = checked_result(attributes.GetPost3DLUT())
-    assert lut == None
+    if lut_size is None:
+        assert lut is None
+    else:
+        assert checked_result(lut.GetSize()) == lut_size

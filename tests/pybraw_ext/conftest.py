@@ -37,3 +37,8 @@ def configuration(codec):
 @pytest.fixture
 def clip(codec, sample_filename):
     return checked_result(codec.OpenClip(sample_filename))
+
+
+@pytest.fixture
+def bw_clip(codec, bw_filename):
+    return checked_result(codec.OpenClip(bw_filename))

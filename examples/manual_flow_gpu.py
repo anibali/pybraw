@@ -93,7 +93,7 @@ class BufferManagerFlow2:
                 checked_result(self.resource_manager.ReleaseResource(None, None, self.frame_state, _pybraw.blackmagicRawResourceTypeBufferCPU))
             self.frame_state = checked_result(self.resource_manager.CreateResource(None, None, frame_state_size_bytes, _pybraw.blackmagicRawResourceTypeBufferCPU, _pybraw.blackmagicRawResourceUsageReadCPUWriteCPU))
             self.frame_state_size_bytes = frame_state_size_bytes
-        checked_result(self.manual_decoder.PopulateFrameStateBuffer(frame, None, None, self.frame_state, self.frame_state_size_bytes))
+        checked_result(self.manual_decoder.PopulateFrameStateBuffer(frame, None, None, self.frame_state, frame_state_size_bytes))
 
     def create_read_job(self, clip_ex, frame_index) -> _pybraw.IBlackmagicRawJob:
         bit_stream_size_bytes = checked_result(clip_ex.GetBitStreamSizeBytes(frame_index))

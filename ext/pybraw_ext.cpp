@@ -45,8 +45,113 @@ struct Resource {
 };
 
 
-// Concrete subclass of IBlackmagicRawCallback which provides an implementation of reference
-// counting and placeholders for each of the callback functions.
+// Trampoline helper class which enables subclassing IBlackmagicRawResourceManager from Python.
+class BlackmagicRawResourceManager : public IBlackmagicRawResourceManager {
+private:
+    std::atomic_ulong m_refCount = {0};
+protected:
+    virtual ~BlackmagicRawResourceManager() {
+        assert(m_refCount == 0);
+    }
+public:
+    BlackmagicRawResourceManager() {
+        AddRef();
+    }
+
+    virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) { return E_NOTIMPL; }
+
+    virtual ULONG STDMETHODCALLTYPE AddRef(void) {
+        return m_refCount.fetch_add(1) + 1;
+    }
+
+    virtual ULONG STDMETHODCALLTYPE Release(void) {
+        ULONG oldRefCount = m_refCount.fetch_sub(1);
+        assert(oldRefCount > 0);
+        if(oldRefCount == 1) {
+            delete this;
+        }
+        return oldRefCount - 1;
+    }
+
+    HRESULT CreateResource(void* context, void* commandQueue, uint32_t sizeBytes, BlackmagicRawResourceType type, BlackmagicRawResourceUsage usage, void** resource) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "CreateResource");
+        if(pyfunc) {
+            py::object ret = pyfunc(context, commandQueue, sizeBytes, type, usage);
+            if(!py::isinstance<py::tuple>(ret)) {
+                py::pybind11_fail("Expected \"IBlackmagicRawResourceManager::CreateResource\" to return a tuple");
+            }
+            py::tuple tuple = ret.cast<py::tuple>();
+            if(!py::isinstance<py::int_>(tuple[0])) {
+                py::pybind11_fail("Expected first return value to be a HRESULT");
+            }
+            if(!py::isinstance<Resource>(tuple[1])) {
+                py::pybind11_fail("Expected second return value to be a Resource");
+            }
+            *resource = tuple[1].cast<Resource>().data;
+            return tuple[0].cast<HRESULT>();
+        }
+        py::pybind11_fail("Tried to call pure virtual function \"IBlackmagicRawResourceManager::CreateResource\"");
+    }
+
+    HRESULT ReleaseResource(void* context, void* commandQueue, void* resource, BlackmagicRawResourceType type) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "ReleaseResource");
+        if(pyfunc) {
+            Resource resource_obj = {};
+            resource_obj.data = resource;
+            py::object ret = pyfunc(context, commandQueue, resource_obj, type);
+            if(!py::isinstance<py::int_>(ret)) {
+                py::pybind11_fail("Expected \"IBlackmagicRawResourceManager::CreateResource\" to return a HRESULT");
+            }
+            return ret.cast<HRESULT>();
+        }
+        py::pybind11_fail("Tried to call pure virtual function \"IBlackmagicRawResourceManager::ReleaseResource\"");
+    }
+
+    HRESULT CopyResource(void* context, void* commandQueue, void* source, BlackmagicRawResourceType sourceType, void* destination, BlackmagicRawResourceType destinationType, uint32_t sizeBytes, bool copyAsync) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "CopyResource");
+        if(pyfunc) {
+            Resource source_resource = {};
+            source_resource.data = source;
+            Resource destination_resource = {};
+            destination_resource.data = destination;
+            py::object ret = pyfunc(context, commandQueue, source_resource, sourceType, destination_resource, destinationType, sizeBytes, copyAsync);
+            if(!py::isinstance<py::int_>(ret)) {
+                py::pybind11_fail("Expected \"IBlackmagicRawResourceManager::CreateResource\" to return a HRESULT");
+            }
+            return ret.cast<HRESULT>();
+        }
+        py::pybind11_fail("Tried to call pure virtual function \"IBlackmagicRawResourceManager::CopyResource\"");
+    }
+
+    HRESULT GetResourceHostPointer(void* context, void* commandQueue, void* resource, BlackmagicRawResourceType resourceType, void** hostPointer) override {
+        py::gil_scoped_acquire gil;
+        py::function pyfunc = py::get_override(this, "GetResourceHostPointer");
+        if(pyfunc) {
+            Resource resource_obj = {};
+            resource_obj.data = resource;
+            py::object ret = pyfunc(context, commandQueue, resource_obj, resourceType);
+            if(!py::isinstance<py::tuple>(ret)) {
+                py::pybind11_fail("Expected \"IBlackmagicRawResourceManager::CreateResource\" to return a tuple");
+            }
+            py::tuple tuple = ret.cast<py::tuple>();
+            if(!py::isinstance<py::int_>(tuple[0])) {
+                py::pybind11_fail("Expected first return value to be a HRESULT");
+            }
+            if(!py::isinstance<Resource>(tuple[1])) {
+                py::pybind11_fail("Expected second return value to be a Resource");
+            }
+            *hostPointer = tuple[1].cast<Resource>().data;
+            return tuple[0].cast<HRESULT>();
+        }
+        py::pybind11_fail("Tried to call pure virtual function \"IBlackmagicRawResourceManager::GetResourceHostPointer\"");
+    }
+};
+
+
+// Trampoline helper class which enables subclassing IBlackmagicRawCallback from Python.
 class BlackmagicRawCallback : public IBlackmagicRawCallback {
 private:
     std::atomic_ulong m_refCount = {0};
@@ -531,6 +636,18 @@ PYBIND11_MODULE(_pybraw, m) {
         .def("to_py_nocopy", [](Resource& self, size_t size_bytes) -> py::array {
             return py::array_t<uint8_t>({size_bytes}, {sizeof(uint8_t)}, ((uint8_t*)self.data), py::none());
         })
+        .def("__int__", [](Resource& self) {
+            return (uintptr_t)self.data;
+        })
+        .def("__hash__", [](Resource& self) {
+            return (uintptr_t)self.data;
+        })
+        .def("__eq__", [](Resource& self, py::object other) {
+            if(!py::isinstance<Resource>(other)) {
+                return false;
+            }
+            return py::hash(py::cast(self)) == py::hash(other);
+        })
     ;
 
     py::class_<IUnknown>(m, "IUnknown")
@@ -963,7 +1080,15 @@ PYBIND11_MODULE(_pybraw, m) {
             HRESULT result = self.CopyResource(context, commandQueue, source.data, sourceType, destination.data, destinationType, sizeBytes, copyAsync);
             return result;
         })
-        // TODO: Add missing bindings
+        .def("GetResourceHostPointer", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType resourceType) {
+            Resource hostPointer = {};
+            HRESULT result = self.GetResourceHostPointer(context, commandQueue, resource.data, resourceType, &hostPointer.data);
+            return std::make_tuple(result, hostPointer);
+        })
+    ;
+
+    py::class_<BlackmagicRawResourceManager,IBlackmagicRawResourceManager,std::unique_ptr<BlackmagicRawResourceManager,Releaser>>(m, "BlackmagicRawResourceManager")
+        .def(py::init<>())
     ;
 
     py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,Releaser>>(m, "IBlackmagicRawConfigurationEx")

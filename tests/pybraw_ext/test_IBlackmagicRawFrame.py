@@ -17,16 +17,16 @@ class CapturingCallback(_pybraw.BlackmagicRawCallback):
 @pytest.fixture
 def callback(codec):
     callback = CapturingCallback()
-    codec.SetCallback(callback)
+    checked_result(codec.SetCallback(callback))
     return callback
 
 
 @pytest.fixture
 def frame(codec, clip, callback):
     read_job = checked_result(clip.CreateJobReadFrame(12))
-    read_job.Submit()
+    checked_result(read_job.Submit())
     read_job.Release()
-    codec.FlushJobs()
+    checked_result(codec.FlushJobs())
     return callback.frame
 
 

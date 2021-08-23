@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-from pybraw import _pybraw
-
-from .helpers import checked_result
+from pybraw import _pybraw, verify
 
 
 class CapturingCallback(_pybraw.BlackmagicRawCallback):
@@ -17,16 +15,16 @@ class CapturingCallback(_pybraw.BlackmagicRawCallback):
 @pytest.fixture
 def callback(codec):
     callback = CapturingCallback()
-    checked_result(codec.SetCallback(callback))
+    verify(codec.SetCallback(callback))
     return callback
 
 
 @pytest.fixture
 def frame(codec, clip, callback):
-    read_job = checked_result(clip.CreateJobReadFrame(12))
-    checked_result(read_job.Submit())
+    read_job = verify(clip.CreateJobReadFrame(12))
+    verify(read_job.Submit())
     read_job.Release()
-    checked_result(codec.FlushJobs())
+    verify(codec.FlushJobs())
     return callback.frame
 
 
@@ -36,15 +34,15 @@ def frame(codec, clip, callback):
     (_pybraw.blackmagicRawResourceFormatRGBU16Planar, 2**16, True, [0, 1, 2]),
 ])
 def test_SetResourceFormat(frame, codec, callback, format, max_val, is_planar, channels):
-    checked_result(frame.SetResourceFormat(format))
-    process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
+    verify(frame.SetResourceFormat(format))
+    process_job = verify(frame.CreateJobDecodeAndProcessFrame())
     process_job.Submit()
     process_job.Release()
     codec.FlushJobs()
 
-    resource_type = checked_result(callback.processed_image.GetResourceType())
+    resource_type = verify(callback.processed_image.GetResourceType())
     assert resource_type == _pybraw.blackmagicRawResourceTypeBufferCPU
-    resource_format = checked_result(callback.processed_image.GetResourceFormat())
+    resource_format = verify(callback.processed_image.GetResourceFormat())
     assert resource_format == format
     np_image = callback.processed_image.to_py()
     del callback.processed_image
@@ -57,16 +55,16 @@ def test_SetResourceFormat(frame, codec, callback, format, max_val, is_planar, c
 
 
 def test_SetResolutionScale(frame, codec, callback):
-    checked_result(frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter))
-    process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
+    verify(frame.SetResolutionScale(_pybraw.blackmagicRawResolutionScaleQuarter))
+    process_job = verify(frame.CreateJobDecodeAndProcessFrame())
     process_job.Submit()
     process_job.Release()
     codec.FlushJobs()
 
     # Check that the resolution is one quarter of the original DCI full frame 4K.
-    width = checked_result(callback.processed_image.GetWidth())
+    width = verify(callback.processed_image.GetWidth())
     assert width == 1024
-    height = checked_result(callback.processed_image.GetHeight())
+    height = verify(callback.processed_image.GetHeight())
     assert height == 540
 
     # from PIL import Image
@@ -75,33 +73,32 @@ def test_SetResolutionScale(frame, codec, callback):
 
 
 def test_CloneFrameProcessingAttributes(frame):
-    attributes = checked_result(frame.CloneFrameProcessingAttributes())
+    attributes = verify(frame.CloneFrameProcessingAttributes())
     assert isinstance(attributes, _pybraw.IBlackmagicRawFrameProcessingAttributes)
-    iso = checked_result(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
+    iso = verify(attributes.GetFrameAttribute(_pybraw.blackmagicRawFrameProcessingAttributeISO)).to_py()
     assert iso == 400
 
 
 def test_GetMetadataIterator(frame):
-    iterator = checked_result(frame.GetMetadataIterator())
+    iterator = verify(frame.GetMetadataIterator())
     metadata = {}
     while True:
         result, key = iterator.GetKey()
         if result == _pybraw.E_FAIL:
             break
         assert result == _pybraw.S_OK
-        metadata[key] = checked_result(iterator.GetData()).to_py()
-        result = iterator.Next()
-        assert result in {_pybraw.S_OK, _pybraw.S_FALSE}
+        metadata[key] = verify(iterator.GetData()).to_py()
+        verify(iterator.Next())
     assert metadata['white_balance_kelvin'] == 5600
     assert_allclose(metadata['sensor_rate'], np.array([25, 1]))
 
 
 def test_GetMetadata(frame):
-    white_balance = checked_result(frame.GetMetadata('white_balance_kelvin'))
+    white_balance = verify(frame.GetMetadata('white_balance_kelvin'))
     assert white_balance.to_py() == 5600
 
 
 def test_SetMetadata(frame):
-    checked_result(frame.SetMetadata('white_balance_kelvin', _pybraw.VariantCreateU32(2800)))
-    white_balance = checked_result(frame.GetMetadata('white_balance_kelvin'))
+    verify(frame.SetMetadata('white_balance_kelvin', _pybraw.VariantCreateU32(2800)))
+    white_balance = verify(frame.GetMetadata('white_balance_kelvin'))
     assert white_balance.to_py() == 2800

@@ -1,11 +1,9 @@
-from pybraw import _pybraw
-
-from .helpers import checked_result
+from pybraw import _pybraw, verify
 
 
 class SimpleCallback(_pybraw.BlackmagicRawCallback):
     def ReadComplete(self, job, result, frame):
-        process_job = checked_result(frame.CreateJobDecodeAndProcessFrame())
+        process_job = verify(frame.CreateJobDecodeAndProcessFrame())
         process_job.Submit()
         process_job.Release()
 
@@ -38,19 +36,19 @@ class ProxyResourceManager(_pybraw.BlackmagicRawResourceManager):
 
 
 def test_subclass_proxy(codec, sample_filename):
-    configuration_ex = checked_result(codec.as_IBlackmagicRawConfigurationEx())
-    resource_manager = checked_result(configuration_ex.GetResourceManager())
+    configuration_ex = verify(codec.as_IBlackmagicRawConfigurationEx())
+    resource_manager = verify(configuration_ex.GetResourceManager())
     proxy = ProxyResourceManager(resource_manager)
-    checked_result(configuration_ex.SetResourceManager(proxy))
+    verify(configuration_ex.SetResourceManager(proxy))
 
     callback = SimpleCallback()
-    checked_result(codec.SetCallback(callback))
+    verify(codec.SetCallback(callback))
 
-    clip = checked_result(codec.OpenClip(sample_filename))
-    read_job = checked_result(clip.CreateJobReadFrame(0))
-    checked_result(read_job.Submit())
+    clip = verify(codec.OpenClip(sample_filename))
+    read_job = verify(clip.CreateJobReadFrame(0))
+    verify(read_job.Submit())
     read_job.Release()
-    checked_result(codec.FlushJobs())
+    verify(codec.FlushJobs())
 
     assert proxy.n_created == 2
     assert proxy.n_released == 2

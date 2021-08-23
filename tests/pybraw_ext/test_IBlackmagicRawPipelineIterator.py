@@ -1,6 +1,4 @@
-from pybraw import _pybraw
-
-from .helpers import checked_result
+from pybraw import _pybraw, verify
 
 
 def test_GetName(pipeline_iterator):
@@ -11,12 +9,12 @@ def test_GetName(pipeline_iterator):
             break
         assert result == _pybraw.S_OK
         pipeline_names.append(pipeline_name)
-        pipeline_iterator.Next()
+        verify(pipeline_iterator.Next())
     assert 'CPU' in pipeline_names
 
 
 def test_GetInterop(pipeline_iterator):
-    interop = checked_result(pipeline_iterator.GetInterop())
+    interop = verify(pipeline_iterator.GetInterop())
     assert interop == _pybraw.blackmagicRawInteropNone
 
 
@@ -28,5 +26,5 @@ def test_GetPipeline(pipeline_iterator):
             break
         assert result == _pybraw.S_OK
         pipelines.append(pipeline)
-        pipeline_iterator.Next()
+        verify(pipeline_iterator.Next())
     assert _pybraw.blackmagicRawPipelineCPU in pipelines

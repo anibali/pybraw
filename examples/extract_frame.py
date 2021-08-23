@@ -19,10 +19,19 @@ def argument_parser():
 
 
 def checked_result(return_values, expected_result=_pybraw.S_OK):
-    assert return_values[0] == expected_result
-    if len(return_values[1:]) == 1:
-        return return_values[1]
-    return return_values[1:]
+    if isinstance(return_values, int):
+        result = return_values
+        unwrapped = None
+    else:
+        result = return_values[0]
+        if len(return_values) == 1:
+            unwrapped = None
+        elif len(return_values) == 2:
+            unwrapped = return_values[1]
+        else:
+            unwrapped = return_values[1:]
+    assert result == expected_result, f'expected result {expected_result}, got {result}'
+    return unwrapped
 
 
 class MyCallback(_pybraw.BlackmagicRawCallback):
@@ -49,13 +58,13 @@ def main(args):
         raise ValueError(f'Frame out of range')
 
     callback = MyCallback()
-    codec.SetCallback(callback)
+    checked_result(codec.SetCallback(callback))
 
     read_job = checked_result(clip.CreateJobReadFrame(opts.frame))
     read_job.Submit()
     read_job.Release()
 
-    codec.FlushJobs()
+    checked_result(codec.FlushJobs())
 
     resource_type = checked_result(callback.processed_image.GetResourceType())
     assert resource_type == _pybraw.blackmagicRawResourceTypeBufferCPU

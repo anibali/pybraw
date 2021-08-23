@@ -257,7 +257,7 @@ def main(args):
     callback = CameraCodecCallback(job_counter)
     checked_result(codec.SetCallback(callback))
     process_clip_manual(clip, resource_manager, manual_decoder, device, job_counter)
-    codec.FlushJobs()
+    checked_result(codec.FlushJobs())
 
     # Release codec. This must happen before releasing the device.
     del clip

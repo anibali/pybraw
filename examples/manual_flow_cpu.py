@@ -212,7 +212,7 @@ def main(args):
     callback = CameraCodecCallback(job_counter)
     checked_result(codec.SetCallback(callback))
     process_clip_manual(clip, resource_manager, manual_decoder, job_counter)
-    codec.FlushJobs()
+    checked_result(codec.FlushJobs())
 
 
 if __name__ == '__main__':

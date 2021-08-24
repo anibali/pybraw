@@ -30,3 +30,10 @@ class ResultCode(IntEnum):
             `True` when the result code indicates success, `False` otherwise.
         """
         return (self & (1 << 31)) == 0
+
+    @classmethod
+    def to_string(cls, result):
+        try:
+            return cls(result).name
+        except:
+            return 'UNKNOWN'

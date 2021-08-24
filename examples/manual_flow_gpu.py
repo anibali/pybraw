@@ -1,9 +1,11 @@
 import argparse
+import logging
 import sys
 from dataclasses import dataclass
 from threading import Condition
 
 from pybraw import _pybraw, verify
+from pybraw.logger import log
 
 RESOURCE_FORMAT = _pybraw.blackmagicRawResourceFormatBGRAU8
 
@@ -115,7 +117,6 @@ class BufferManagerFlow2:
                 verify(self.resource_manager.ReleaseResource(self.context, self.command_queue, self.processed_buffer, self.gpu_resource_type))
             self.processed_buffer = verify(self.resource_manager.CreateResource(self.context, self.command_queue, processed_buffer_size_bytes, self.gpu_resource_type, _pybraw.blackmagicRawResourceUsageReadGPUWriteGPU))
             self.processed_buffer_size_bytes = processed_buffer_size_bytes
-        # TODO: Can we use self.decoded_buffer_size_bytes?
         decoded_buffer_size_bytes = verify(self.manual_decoder.GetDecodedSizeBytes(self.frame_state))
         verify(self.resource_manager.CopyResource(self.context, self.command_queue, self.decoded_buffer_cpu, _pybraw.blackmagicRawResourceTypeBufferCPU, self.decoded_buffer_gpu, self.gpu_resource_type, decoded_buffer_size_bytes, True))
         if self.working_buffer is None:
@@ -141,9 +142,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(read_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Read frame index: {user_data.frame_index}')
+            log.info(f'Read frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to read frame index: {user_data.frame_index}')
+            log.error(f'Failed to read frame index: {user_data.frame_index}')
             self.job_counter.end_job()
             return
 
@@ -160,9 +161,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(decode_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Decoded frame index: {user_data.frame_index}')
+            log.info(f'Decoded frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to decode frame index: {user_data.frame_index}')
+            log.error(f'Failed to decode frame index: {user_data.frame_index}')
             self.job_counter.end_job()
             return
 
@@ -176,9 +177,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(process_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Processed frame index: {user_data.frame_index}')
+            log.info(f'Processed frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to process frame index: {user_data.frame_index}')
+            log.error(f'Failed to process frame index: {user_data.frame_index}')
 
         self.job_counter.end_job()
 
@@ -192,7 +193,7 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
     elif pipeline == _pybraw.blackmagicRawPipelineMetal:
         gpu_resource_type = _pybraw.blackmagicRawResourceTypeBufferMetal
     else:
-        print('Failed to get BlackmagicRawResourceType!')
+        log.error('Failed to get BlackmagicRawResourceType!')
         return
     clip_ex = verify(clip.as_IBlackmagicRawClipEx())
     clip_processing_attributes = verify(clip.as_IBlackmagicRawClipProcessingAttributes())
@@ -221,12 +222,13 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
 
 def main(args):
     opts = argument_parser().parse_args(args)
+    log.setLevel(logging.DEBUG)
 
     factory = _pybraw.CreateBlackmagicRawFactoryInstance()
     pipeline_iterator = verify(factory.CreatePipelineIterator(_pybraw.blackmagicRawInteropNone))
     pipeline = verify(pipeline_iterator.GetPipeline())
     if pipeline == _pybraw.blackmagicRawPipelineCPU:
-        print('No Compatible GPU pipeline supported by your system!')
+        log.error('No Compatible GPU pipeline supported by your system!')
         return
     device_iterator = verify(factory.CreatePipelineDeviceIterator(pipeline, _pybraw.blackmagicRawInteropNone))
     device = verify(device_iterator.CreateDevice())

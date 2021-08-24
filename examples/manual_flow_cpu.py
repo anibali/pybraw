@@ -1,9 +1,11 @@
 import argparse
+import logging
 import sys
 from dataclasses import dataclass
 from threading import Condition
 
 from pybraw import _pybraw, verify
+from pybraw.logger import log
 
 RESOURCE_FORMAT = _pybraw.blackmagicRawResourceFormatRGBAU8
 
@@ -116,9 +118,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(read_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Read frame index: {user_data.frame_index}')
+            log.info(f'Read frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to read frame index: {user_data.frame_index}')
+            log.error(f'Failed to read frame index: {user_data.frame_index}')
             self.job_counter.end_job()
             return
 
@@ -135,9 +137,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(decode_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Decoded frame index: {user_data.frame_index}')
+            log.info(f'Decoded frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to decode frame index: {user_data.frame_index}')
+            log.error(f'Failed to decode frame index: {user_data.frame_index}')
             self.job_counter.end_job()
             return
 
@@ -151,9 +153,9 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(process_job.pop_py_user_data())
 
         if result == _pybraw.S_OK:
-            print(f'Processed frame index: {user_data.frame_index}')
+            log.info(f'Processed frame index: {user_data.frame_index}')
         else:
-            print(f'Failed to process frame index: {user_data.frame_index}')
+            log.error(f'Failed to process frame index: {user_data.frame_index}')
 
         self.job_counter.end_job()
 
@@ -185,6 +187,7 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
 
 def main(args):
     opts = argument_parser().parse_args(args)
+    log.setLevel(logging.DEBUG)
 
     factory = _pybraw.CreateBlackmagicRawFactoryInstance()
     codec = verify(factory.CreateCodec())

@@ -1,6 +1,7 @@
 from concurrent.futures import Future
 from dataclasses import dataclass
 from threading import Condition, RLock
+from typing import List
 
 from pybraw import _pybraw, verify, ResultCode, ResolutionScale, PixelFormat
 from pybraw.logger import log
@@ -58,7 +59,7 @@ class Task:
             self._future = None
             return result
         finally:
-            self.task_manager.end_task(self)
+            self.task_manager._end_task(self)
 
     def is_complete(self):
         """Check whether the result of this task is available.
@@ -120,7 +121,14 @@ class TaskManager:
                     raise StopIteration
                 return self._completed_tasks.pop(0)
 
-    def __init__(self, buffer_manager_pool, clip_ex, pixel_format):
+    def __init__(
+        self,
+        buffer_manager_pool: List[BufferManager],
+        clip_ex: _pybraw.IBlackmagicRawClipEx,
+        pixel_format: PixelFormat,
+    ):
+        if len(buffer_manager_pool) < 1:
+            raise ValueError('There must be at least one BufferManager in the pool')
         self.pixel_format = pixel_format
         self._clip_ex = clip_ex
         self._lock = RLock()
@@ -140,6 +148,8 @@ class TaskManager:
 
     @property
     def max_running_tasks(self):
+        """The maximum number of tasks that can be running at once.
+        """
         return self._max_running_tasks
 
     def _try_start_task(self):
@@ -156,13 +166,24 @@ class TaskManager:
                 read_job.Release()
 
     def enqueue_task(self, frame_index, *, resolution_scale=ResolutionScale.Full, **postprocess_kwargs):
+        """Add a new task to the processing queue.
+
+        Args:
+            frame_index: The index of the frame to read, decode, and process.
+            resolution_scale: The scale at which to decode the frame.
+            **postprocess_kwargs: Keyword arguments which will be passed to
+                `BufferManager.postprocess`.
+
+        Returns:
+            The newly created and enqueued task.
+        """
         task = Task(self, frame_index, self.pixel_format, resolution_scale, postprocess_kwargs)
         with self._lock:
             self._queued_tasks.append(task)
             self._try_start_task()
         return task
 
-    def end_task(self, task):
+    def _end_task(self, task):
         with self._lock:
             buffer_manager = self._unavailable_buffer_managers[task]
             del self._unavailable_buffer_managers[task]
@@ -172,6 +193,9 @@ class TaskManager:
 
 
 class ManualFlowCallback(_pybraw.BlackmagicRawCallback):
+    """Callbacks for the PyTorch manual decoding flows.
+    """
+
     def _format_result(self, result):
         return f'{ResultCode.to_hex(result)} "{ResultCode.to_string(result)}"'
 

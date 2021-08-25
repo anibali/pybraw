@@ -100,23 +100,45 @@ class BufferManager(ABC):
         self,
         processed_image: _pybraw.IBlackmagicRawProcessedImage,
         resolution_scale: ResolutionScale,
-        device: torch.device = None,
+        device: Optional[torch.device] = None,
         crop: Optional[Sequence[int]] = None,
         out_size: Optional[Sequence[int]] = None,
-    ):
+    ) -> torch.Tensor:
+        """Post-process the frame image.
+
+        The tensor returned from the function owns its memory, which means that it is still valid
+        after the buffer manager is reused.
+
+        Args:
+            processed_image: The processed frame image.
+            resolution_scale: The scale at which the frame was decoded.
+            device: The result will be stored in this device's memory. If not specified, the image
+                will be kept on the same device.
+            crop: An input region to crop (x, y, width, height). If not specified, the image will
+                not be cropped.
+            out_size: The output image size (width, height). If not specified, the image will
+                not be resized beyond the scaling which already may have occurred due to the
+                resolution scale.
+
+        Returns:
+            The post-processed frame image.
+        """
+        # The output buffer contains the processed frame image.
         output_buffer = self.get_output_buffer()
 
+        # Confirm that the `processed_image` refers to the same resource as `output_buffer`.
         ref_resource = verify(processed_image.GetResource())
         if output_buffer.data_ptr() != int(ref_resource):
             raise ValueError('Processed image does not match the buffer')
 
-        if device is None:
-            device = output_buffer.device
-
         if resolution_scale.is_flipped():
             raise NotImplementedError('Flipped images are currently not supported')
+
+        # Get the scale factor. For example, `8` means that the image has already been scaled to
+        # 1/8th of the original full frame size.
         scale_factor = resolution_scale.factor()
 
+        # Get information about the size and layout of the processed image.
         width = verify(processed_image.GetWidth())
         height = verify(processed_image.GetHeight())
         resource_format = verify(processed_image.GetResourceFormat())
@@ -124,12 +146,12 @@ class BufferManager(ABC):
         n_channels = len(pixel_format.channels())
         n_elements = n_channels * height * width
 
+        # Wrap the output buffer in a tensor.
         image_tensor = _storage_to_tensor(output_buffer)
         image_tensor = image_tensor[:n_elements]
-        image_tensor = image_tensor.to(device)
 
+        # Give the tensor a shape.
         if pixel_format.is_planar():
-            print(n_channels, height, width)
             image_tensor = image_tensor.view(n_channels, height, width)
             height_axis = 1
             width_axis = 2
@@ -138,6 +160,7 @@ class BufferManager(ABC):
             height_axis = 0
             width_axis = 1
 
+        # Crop the image.
         if crop is not None:
             x, y, w, h = crop
             x = round(x / scale_factor)
@@ -146,6 +169,7 @@ class BufferManager(ABC):
             h = round(h / scale_factor)
             image_tensor = image_tensor.narrow(width_axis, x, w).narrow(height_axis, y, h)
 
+        # Resize the image.
         if out_size is not None:
             out_width, out_height = out_size
             if not (out_width == image_tensor.shape[width_axis] and out_height == image_tensor.shape[height_axis]):
@@ -154,8 +178,13 @@ class BufferManager(ABC):
                 image_tensor = interpolate(image_tensor[None, ...], (out_height, out_width),
                                            mode='bilinear', align_corners=False)[0]
 
-        # Replace the previous buffer if we are referencing its memory.
-        # This prevents us from overwriting the data with subsequent reads.
+        # Move the image tensor to the desired device.
+        if device is not None:
+            image_tensor = image_tensor.to(device)
+
+        # Ensure that the returned image tensor is independent of the buffer manager.
+        # This prevents us from overwriting the data with subsequent reads when the buffer manager
+        # is used again in the future.
         if image_tensor.storage().data_ptr() == output_buffer.data_ptr():
             self.replace_output_buffer()
 
@@ -163,7 +192,19 @@ class BufferManager(ABC):
 
 
 class BufferManagerFlow1(BufferManager):
-    def __init__(self, manual_decoder, post_3d_lut: Optional[torch.ByteStorage], pixel_format: PixelFormat):
+    def __init__(
+        self,
+        manual_decoder: _pybraw.IBlackmagicRawManualDecoderFlow1,
+        post_3d_lut: Optional[torch.ByteStorage],
+        pixel_format: PixelFormat,
+    ):
+        """Create a buffer manager for manual decoder flow 1 (CPU-only).
+
+        Args:
+            manual_decoder: The manual decoder flow.
+            post_3d_lut: The post 3D LUT data, stored in CPU memory.
+            pixel_format: The desired pixel format of the output image.
+        """
         super().__init__(manual_decoder)
         self._post_3d_lut = post_3d_lut
         self._pixel_format = pixel_format
@@ -199,11 +240,31 @@ class BufferManagerFlow1(BufferManager):
 
 
 class BufferManagerFlow2(BufferManager):
-    def __init__(self, manual_decoder, post_3d_lut_gpu: Optional[torch.cuda.ByteStorage], pixel_format: PixelFormat, context, command_queue, processing_device: torch.device):
+    def __init__(
+        self,
+        manual_decoder: _pybraw.IBlackmagicRawManualDecoderFlow2,
+        post_3d_lut_gpu: Optional[torch.cuda.ByteStorage],
+        pixel_format: PixelFormat,
+        context,
+        command_queue,
+        processing_device: torch.device,
+    ):
+        """Create a buffer manager for manual decoder flow 2 (GPU accelerated).
+
+        Args:
+            manual_decoder: The manual decoder flow.
+            post_3d_lut_gpu: The post 3D LUT data, stored in CUDA memory.
+            pixel_format: The desired pixel format of the output image.
+            context: The CUDA context.
+            command_queue: The GPU command queue (this should be `None`).
+            processing_device: The processing device.
+        """
         super().__init__(manual_decoder)
         self.context = context
         self.command_queue = command_queue
         self._post_3d_lut_gpu = post_3d_lut_gpu
+        if processing_device.type != 'cuda':
+            raise ValueError('The processing device must be a CUDA device')
         self.processing_device = processing_device
         with torch.cuda.device(self.processing_device):
             self.decoded_buffer_gpu = torch.cuda.ByteStorage(0)

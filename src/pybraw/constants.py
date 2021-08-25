@@ -37,3 +37,58 @@ class ResultCode(IntEnum):
             return cls(result).name
         except:
             return 'UNKNOWN'
+
+
+class PixelFormat(IntEnum):
+    """An enum representing the pixel format of an image resource.
+    """
+    RGBA_U8_Packed = _pybraw.blackmagicRawResourceFormatRGBAU8
+    BGRA_U8_Packed = _pybraw.blackmagicRawResourceFormatBGRAU8
+    RGB_U16_Packed = _pybraw.blackmagicRawResourceFormatRGBU16
+    RGBA_U16_Packed = _pybraw.blackmagicRawResourceFormatRGBU16
+    BGRA_U16_Packed = _pybraw.blackmagicRawResourceFormatBGRAU16
+    RGB_U16_Planar = _pybraw.blackmagicRawResourceFormatRGBU16Planar
+    RGB_F32_Packed = _pybraw.blackmagicRawResourceFormatRGBF32
+    RGB_F32_Planar = _pybraw.blackmagicRawResourceFormatRGBF32Planar
+    BGRA_F32_Packed = _pybraw.blackmagicRawResourceFormatBGRAF32
+
+    def channels(self):
+        parts = self.name.split('_')
+        assert parts[0] in {'RGBA', 'BGRA', 'RGB'}
+        return parts[0]
+
+    def data_type(self):
+        parts = self.name.split('_')
+        assert parts[1] in {'U8', 'U16', 'F32'}
+        return parts[1]
+
+    def is_planar(self):
+        parts = self.name.split('_')
+        assert parts[2] in {'Packed', 'Planar'}
+        return parts[2] == 'Planar'
+
+
+class ResolutionScale(IntEnum):
+    """An enum representing different resolution scaling factors.
+    """
+    Full = _pybraw.blackmagicRawResolutionScaleFull
+    Half = _pybraw.blackmagicRawResolutionScaleHalf
+    Quarter = _pybraw.blackmagicRawResolutionScaleQuarter
+    Eighth = _pybraw.blackmagicRawResolutionScaleEighth
+    Full_Flipped = _pybraw.blackmagicRawResolutionScaleFullUpsideDown
+    Half_Flipped = _pybraw.blackmagicRawResolutionScaleHalfUpsideDown
+    Quarter_Flipped = _pybraw.blackmagicRawResolutionScaleQuarterUpsideDown
+    Eighth_Flipped = _pybraw.blackmagicRawResolutionScaleEighthUpsideDown
+
+    def factor(self):
+        parts = self.name.split('_')
+        lookup = {'Full': 1, 'Half': 2, 'Quarter': 4, 'Eighth': 8}
+        assert parts[0] in lookup
+        return lookup[parts[0]]
+
+    def is_flipped(self):
+        parts = self.name.split('_')
+        if len(parts) == 1:
+            return False
+        assert parts[1] == 'Flipped'
+        return True

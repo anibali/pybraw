@@ -7,6 +7,11 @@ from pybraw.logger import log
 from pybraw.torch.buffer_manager import BufferManager
 
 
+class TaskConsumedError(Exception):
+    """An exception indicating that an invalid operation was performed on a consumed task."""
+    pass
+
+
 class Task:
     def __init__(self, task_manager, frame_index: int, pixel_format: PixelFormat, resolution_scale: ResolutionScale, postprocess_kwargs: dict):
         self.task_manager = task_manager
@@ -18,18 +23,36 @@ class Task:
         self._callbacks = []
 
     def reject(self, exception: BaseException):
+        """Set the result of the task to an exception, making the task unsuccessful.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
         self._future.set_exception(exception)
         for callback in self._callbacks:
             callback(self, False)
 
     def resolve(self, result):
+        """Set the result of the task, making the task successful.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
         self._future.set_result(result)
         for callback in self._callbacks:
             callback(self, True)
 
+    def is_consumed(self):
+        """Check whether this task has been consumed.
+        """
+        return self._future is None
+
     def consume(self):
-        if self._future is None:
-            raise RuntimeError('Task already consumed')
+        """Return the image produced by this task and end the task.
+
+        The function call will wait for the task to complete if it is still running. Consuming this
+        task will allow another queued task to begin.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
         try:
             result = self._future.result()
             self._future = None
@@ -38,9 +61,20 @@ class Task:
             self.task_manager.end_task(self)
 
     def is_complete(self):
+        """Check whether the result of this task is available.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
         return self._future.done()
 
     def on_complete(self, callback):
+        """Register a callback for when the task completes.
+
+        The callback will be called with two arguments: the completed task, and a boolean
+        indicating whether the task was successful.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
         if self.is_complete():
             exception = self._future.exception()
             if exception is None:

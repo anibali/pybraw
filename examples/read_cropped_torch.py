@@ -17,7 +17,7 @@ def argument_parser():
     parser.add_argument('--device', type=str, default='cuda',
                         help='processing device')
     parser.add_argument('--show', action='store_true', default=False,
-                        help='show frames')
+                        help='show images in a GUI window')
     return parser
 
 
@@ -44,6 +44,13 @@ def main(args):
     opts = argument_parser().parse_args(args)
     log.setLevel(logging.DEBUG)
 
+    if opts.show:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            log.critical('The --show option requires Matplotlib, but it could not be imported')
+            return
+
     reader = FrameImageReader(opts.input, processing_device=opts.device)
     frame_count = reader.frame_count()
     frame_width = reader.frame_width()
@@ -54,31 +61,36 @@ def main(args):
     crop_h = 800
     max_crop_x = frame_width - crop_w
     max_crop_y = frame_height - crop_h
+    out_size = (100, 100)
 
     if opts.show:
-        import matplotlib.pyplot as plt
         fig, ax = plt.subplots(1, 1)
         plt.show(block=False)
         im = None
 
-    with reader.run_flow(PixelFormat.RGB_F32_Planar) as task_manager:
+    with reader.run_flow(PixelFormat.RGB_F32_Planar, max_running_tasks=3) as task_manager:
         tasks = []
         for frame_index in range(frame_count):
-            # Bounce the crop region around the image region, DVD screensaver style.
+            # Move the crop region in a diagonal bouncing pattern, just like the way the logo moves
+            # around in the classic DVD player screensavers.
             crop_x = max_crop_x - abs((frame_index * 20) % (2 * max_crop_x) - max_crop_x)
             crop_y = max_crop_y - abs((frame_index * 20) % (2 * max_crop_y) - max_crop_y)
             crop = (crop_x, crop_y, crop_w, crop_h)
-            out_size = (100, 100)
+            # Select the smallest possible read resolution scale which is larger than what we need.
             resolution_scale = _select_resolution_scale(frame_width, frame_height, crop, out_size)
+            # Add the frame read, crop, and resize task to the processing queue.
             tasks.append(task_manager.enqueue_task(frame_index, resolution_scale=resolution_scale, crop=crop, out_size=out_size))
 
         prev_time = 0
         avg_fps = 0
         for task in tasks:
+            # Wait for the task to finish, get its result, and mark it as completed so the next
+            # queued task can begin.
             image_tensor = task.consume()
+
             log.info(f'Mean pixel value for frame {task.frame_index}: {image_tensor.mean([1, 2]).tolist()}')
             if opts.show:
-                # Cap the FPS based on the video frame rate.
+                # Cap the FPS such that the display rate does not exceed the video frame rate.
                 plt.pause(max(frame_time - (perf_counter() - prev_time), 0.001))
             cur_time = perf_counter()
             dt = cur_time - prev_time

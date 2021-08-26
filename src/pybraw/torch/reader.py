@@ -18,23 +18,28 @@ class FrameImageReader:
         self.codec = verify(self.factory.CreateCodec())
 
         if self.processing_device.type == 'cuda':
-            torch.cuda.init()
             pipeline = _pybraw.blackmagicRawPipelineCUDA
+        elif self.processing_device.type == 'cpu':
+            pipeline = _pybraw.blackmagicRawPipelineCPU
+        else:
+            raise ValueError(f'Unsupported processing device: {self.processing_device}')
+
+        configuration: _pybraw.IBlackmagicRawConfiguration = verify(self.codec.as_IBlackmagicRawConfiguration())
+        if not verify(configuration.IsPipelineSupported(pipeline)):
+            raise ValueError(f'Pipeline {pipeline.name} is not supported by this machine')
+
+        if pipeline == _pybraw.blackmagicRawPipelineCUDA:
             with torch.cuda.device(self.processing_device):
                 self.context = get_current_cuda_context()
             self.command_queue = None
-
-            configuration = verify(self.codec.as_IBlackmagicRawConfiguration())
-            verify(configuration.SetPipeline(pipeline, self.context, self.command_queue))
             self.manual_decoder = verify(self.codec.as_IBlackmagicRawManualDecoderFlow2())
-            self.clip = verify(self.codec.OpenClip(self.video_path))
-        elif self.processing_device.type == 'cpu':
+        else:
             self.context = None
             self.command_queue = None
             self.manual_decoder = verify(self.codec.as_IBlackmagicRawManualDecoderFlow1())
-            self.clip = verify(self.codec.OpenClip(self.video_path))
-        else:
-            raise NotImplementedError(f'Unsupported processing device: {self.processing_device}')
+
+        verify(configuration.SetPipeline(pipeline, self.context, self.command_queue))
+        self.clip = verify(self.codec.OpenClip(self.video_path))
 
     def frame_count(self):
         return verify(self.clip.GetFrameCount())

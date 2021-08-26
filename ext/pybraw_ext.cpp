@@ -6,6 +6,7 @@
 #include <atomic>
 
 namespace py = pybind11;
+using namespace pybind11::literals;
 
 
 #define DEF_QUERY_INTERFACE(S, T)\
@@ -13,7 +14,7 @@ namespace py = pybind11;
     LPVOID pv = nullptr;\
     HRESULT result = self.QueryInterface(IID_##T, &pv);\
     return std::make_tuple(result, (T*)pv);\
-})
+}, "Get the "#T" interface to this "#S)
 
 
 class Releaser {
@@ -593,7 +594,7 @@ PYBIND11_MODULE(_pybraw, m) {
         .def_readwrite("bounds", &SafeArray::bounds)
         .def("to_py", [](SafeArray* self) -> py::array {
             return convert_safe_array_to_numpy(self, py::handle());
-        })
+        }, "Return a copy of this SafeArray as a Numpy array.")
 //        .def("to_py_nocopy", [](SafeArray* self) -> py::array {
 //            // WARN: This is set up such that data is not copied. So if the SafeArray is freed,
 //            //       it is not safe to continue using this array.
@@ -635,7 +636,7 @@ PYBIND11_MODULE(_pybraw, m) {
     py::class_<Resource>(m, "Resource")
         .def("to_py_nocopy", [](Resource& self, size_t size_bytes) -> py::array {
             return py::array_t<uint8_t>({size_bytes}, {sizeof(uint8_t)}, ((uint8_t*)self.data), py::none());
-        })
+        }, "Return a view of this resource as a Numpy array. The view will not be valid after the resource is released.")
         .def("__int__", [](Resource& self) {
             return (uintptr_t)self.data;
         })
@@ -673,418 +674,647 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawClipEx,IUnknown,std::unique_ptr<IBlackmagicRawClipEx,Releaser>>(m, "IBlackmagicRawClipEx")
-        .def("GetMaxBitStreamSizeBytes", [](IBlackmagicRawClipEx& self) {
-            uint32_t maxBitStreamSizeBytes = 0;
-            HRESULT result = self.GetMaxBitStreamSizeBytes(&maxBitStreamSizeBytes);
-            return std::make_tuple(result, maxBitStreamSizeBytes);
-        })
-        .def("GetBitStreamSizeBytes", [](IBlackmagicRawClipEx& self, uint64_t frameIndex) {
-            uint32_t bitStreamSizeBytes = 0;
-            HRESULT result = self.GetBitStreamSizeBytes(frameIndex, &bitStreamSizeBytes);
-            return std::make_tuple(result, bitStreamSizeBytes);
-        })
-        .def("CreateJobReadFrame", [](IBlackmagicRawClipEx& self, uint64_t frameIndex, Resource bitStream, uint32_t bitStreamSizeBytes) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobReadFrame(frameIndex, bitStream.data, bitStreamSizeBytes, &job);
-            return std::make_tuple(result, job);
-        })
-        .def("QueryTimecodeInfo", [](IBlackmagicRawClipEx& self) {
-            uint32_t baseFrameIndex = 0;
-            bool isDropFrameTimecode = false;
-            HRESULT result = self.QueryTimecodeInfo(&baseFrameIndex, &isDropFrameTimecode);
-            return std::make_tuple(result, baseFrameIndex, isDropFrameTimecode);
-        })
+        .def("GetMaxBitStreamSizeBytes",
+            [](IBlackmagicRawClipEx& self) {
+                uint32_t maxBitStreamSizeBytes = 0;
+                HRESULT result = self.GetMaxBitStreamSizeBytes(&maxBitStreamSizeBytes);
+                return std::make_tuple(result, maxBitStreamSizeBytes);
+            },
+            "Inspect all frames and return the maximum bit stream size encountered."
+        )
+        .def("GetBitStreamSizeBytes",
+            [](IBlackmagicRawClipEx& self, uint64_t frameIndex) {
+                uint32_t bitStreamSizeBytes = 0;
+                HRESULT result = self.GetBitStreamSizeBytes(frameIndex, &bitStreamSizeBytes);
+                return std::make_tuple(result, bitStreamSizeBytes);
+            },
+            "Return the bit stream size for the provided frame.",
+            "frameIndex"_a
+        )
+        .def("CreateJobReadFrame",
+            [](IBlackmagicRawClipEx& self, uint64_t frameIndex, Resource bitStream, uint32_t bitStreamSizeBytes) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobReadFrame(frameIndex, bitStream.data, bitStreamSizeBytes, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job that will read the frame's bit stream into memory.",
+            "frameIndex"_a, "bitStream"_a, "bitStreamSizeBytes"_a
+        )
+        .def("QueryTimecodeInfo",
+            [](IBlackmagicRawClipEx& self) {
+                uint32_t baseFrameIndex = 0;
+                bool isDropFrameTimecode = false;
+                HRESULT result = self.QueryTimecodeInfo(&baseFrameIndex, &isDropFrameTimecode);
+                return std::make_tuple(result, baseFrameIndex, isDropFrameTimecode);
+            },
+            "Query the timecode info for the clip."
+        )
     ;
 
     py::class_<IBlackmagicRawPost3DLUT,IUnknown,std::unique_ptr<IBlackmagicRawPost3DLUT,Releaser>>(m, "IBlackmagicRawPost3DLUT")
-        .def("GetName", [](IBlackmagicRawPost3DLUT& self) {
-            const char* name = nullptr;
-            HRESULT result = self.GetName(&name);
-            return std::make_tuple(result, name);
-        })
-        .def("GetTitle", [](IBlackmagicRawPost3DLUT& self) {
-            const char* title = nullptr;
-            HRESULT result = self.GetTitle(&title);
-            return std::make_tuple(result, title);
-        })
-        .def("GetSize", [](IBlackmagicRawPost3DLUT& self) {
-            uint32_t size = 0;
-            HRESULT result = self.GetSize(&size);
-            return std::make_tuple(result, size);
-        })
-        .def("GetResourceGPU", [](IBlackmagicRawPost3DLUT& self, void* context, void* commandQueue) {
-            Resource resource = {};
-            BlackmagicRawResourceType type = 0;
-            HRESULT result = self.GetResourceGPU(context, commandQueue, &type, &resource.data);
-            return std::make_tuple(result, type, resource);
-        })
-        .def("GetResourceCPU", [](IBlackmagicRawPost3DLUT& self) {
-            Resource resource = {};
-            HRESULT result = self.GetResourceCPU(&resource.data);
-            return std::make_tuple(result, resource);
-        })
-        .def("GetResourceSizeBytes", [](IBlackmagicRawPost3DLUT& self) {
-            uint32_t sizeBytes = 0;
-            HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
-            return std::make_tuple(result, sizeBytes);
-        })
+        .def("GetName",
+            [](IBlackmagicRawPost3DLUT& self) {
+                const char* name = nullptr;
+                HRESULT result = self.GetName(&name);
+                return std::make_tuple(result, name);
+            },
+            "Get the name of the 3D LUT."
+        )
+        .def("GetTitle",
+            [](IBlackmagicRawPost3DLUT& self) {
+                const char* title = nullptr;
+                HRESULT result = self.GetTitle(&title);
+                return std::make_tuple(result, title);
+            },
+            "Get the title of the 3D LUT."
+        )
+        .def("GetSize",
+            [](IBlackmagicRawPost3DLUT& self) {
+                uint32_t size = 0;
+                HRESULT result = self.GetSize(&size);
+                return std::make_tuple(result, size);
+            },
+            "Get the size of the LUT (e.g. 17 for a 17x17x17 LUT)."
+        )
+        .def("GetResourceGPU",
+            [](IBlackmagicRawPost3DLUT& self, void* context, void* commandQueue) {
+                Resource resource = {};
+                BlackmagicRawResourceType type = 0;
+                HRESULT result = self.GetResourceGPU(context, commandQueue, &type, &resource.data);
+                return std::make_tuple(result, type, resource);
+            },
+            "Get the GPU resource the LUT is stored in.",
+            "context"_a, "commandQueue"_a
+        )
+        .def("GetResourceCPU",
+            [](IBlackmagicRawPost3DLUT& self) {
+                Resource resource = {};
+                HRESULT result = self.GetResourceCPU(&resource.data);
+                return std::make_tuple(result, resource);
+            },
+            "Get the CPU resource the LUT is stored in."
+        )
+        .def("GetResourceSizeBytes",
+            [](IBlackmagicRawPost3DLUT& self) {
+                uint32_t sizeBytes = 0;
+                HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
+                return std::make_tuple(result, sizeBytes);
+            },
+            "Get the size of the resource in bytes."
+        )
     ;
 
     py::class_<IBlackmagicRawClipProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawClipProcessingAttributes,Releaser>>(m, "IBlackmagicRawClipProcessingAttributes")
-        .def("GetClipAttribute", [](IBlackmagicRawClipProcessingAttributes& self, BlackmagicRawClipProcessingAttribute attribute) {
-            Variant value;
-            VariantInit(&value);
-            HRESULT result = self.GetClipAttribute(attribute, &value);
-            return std::make_tuple(result, value);
-        })
-        .def("SetClipAttribute", &IBlackmagicRawClipProcessingAttributes::SetClipAttribute)
-        .def("GetPost3DLUT", [](IBlackmagicRawClipProcessingAttributes& self) {
-            IBlackmagicRawPost3DLUT* lut = nullptr;
-            HRESULT result = self.GetPost3DLUT(&lut);
-            return std::make_tuple(result, lut);
-        })
+        .def("GetClipAttribute",
+            [](IBlackmagicRawClipProcessingAttributes& self, BlackmagicRawClipProcessingAttribute attribute) {
+                Variant value;
+                VariantInit(&value);
+                HRESULT result = self.GetClipAttribute(attribute, &value);
+                return std::make_tuple(result, value);
+            },
+            "Get the attribute.",
+            "attribute"_a
+        )
+        .def("SetClipAttribute",
+            &IBlackmagicRawClipProcessingAttributes::SetClipAttribute,
+            "Set the attribute.",
+            "attribute"_a, "value"_a
+        )
+        .def("GetPost3DLUT",
+            [](IBlackmagicRawClipProcessingAttributes& self) {
+                IBlackmagicRawPost3DLUT* lut = nullptr;
+                HRESULT result = self.GetPost3DLUT(&lut);
+                return std::make_tuple(result, lut);
+            },
+            "Get the active 3D LUT."
+        )
     ;
 
     py::class_<IBlackmagicRawFrameProcessingAttributes,IUnknown,std::unique_ptr<IBlackmagicRawFrameProcessingAttributes,Releaser>>(m, "IBlackmagicRawFrameProcessingAttributes")
-        .def("GetFrameAttribute", [](IBlackmagicRawFrameProcessingAttributes& self, BlackmagicRawFrameProcessingAttribute attribute) {
-            Variant value;
-            VariantInit(&value);
-            HRESULT result = self.GetFrameAttribute(attribute, &value);
-            return std::make_tuple(result, value);
-        })
-        .def("SetFrameAttribute", &IBlackmagicRawFrameProcessingAttributes::SetFrameAttribute)
+        .def("GetFrameAttribute",
+            [](IBlackmagicRawFrameProcessingAttributes& self, BlackmagicRawFrameProcessingAttribute attribute) {
+                Variant value;
+                VariantInit(&value);
+                HRESULT result = self.GetFrameAttribute(attribute, &value);
+                return std::make_tuple(result, value);
+            },
+            "Get the attribute.",
+            "attribute"_a
+        )
+        .def("SetFrameAttribute",
+            &IBlackmagicRawFrameProcessingAttributes::SetFrameAttribute,
+            "Set the attribute.",
+            "attribute"_a, "value"_a
+        )
     ;
 
     py::class_<IBlackmagicRawFrame,IUnknown,std::unique_ptr<IBlackmagicRawFrame,Releaser>>(m, "IBlackmagicRawFrame")
-        .def("GetFrameIndex", [](IBlackmagicRawFrame& self) {
-            uint64_t frameIndex = 0;
-            HRESULT result = self.GetFrameIndex(&frameIndex);
-            return std::make_tuple(result, frameIndex);
-        })
-        .def("GetTimecode", [](IBlackmagicRawFrame& self) {
-            const char* timecode = nullptr;
-            HRESULT result = self.GetTimecode(&timecode);
-            return std::make_tuple(result, timecode);
-        })
-        .def("GetMetadataIterator", [](IBlackmagicRawFrame& self) {
-            IBlackmagicRawMetadataIterator* iterator = nullptr;
-            HRESULT result = self.GetMetadataIterator(&iterator);
-            return std::make_tuple(result, iterator);
-        })
-        .def("GetMetadata", [](IBlackmagicRawFrame& self, const char* key) {
-            Variant value;
-            VariantInit(&value);
-            HRESULT result = self.GetMetadata(key, &value);
-            return std::make_tuple(result, value);
-        })
-        .def("SetMetadata", &IBlackmagicRawFrame::SetMetadata)
-        .def("CloneFrameProcessingAttributes", [](IBlackmagicRawFrame& self) {
-            IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes = nullptr;
-            HRESULT result = self.CloneFrameProcessingAttributes(&frameProcessingAttributes);
-            return std::make_tuple(result, frameProcessingAttributes);
-        })
-        .def("SetResolutionScale", &IBlackmagicRawFrame::SetResolutionScale)
-        .def("GetResolutionScale", [](IBlackmagicRawFrame& self) {
-            BlackmagicRawResolutionScale resolutionScale = 0;
-            HRESULT result = self.GetResolutionScale(&resolutionScale);
-            return std::make_tuple(result, resolutionScale);
-        })
-        .def("SetResourceFormat", &IBlackmagicRawFrame::SetResourceFormat)
-        .def("GetResourceFormat", [](IBlackmagicRawFrame& self) {
-            BlackmagicRawResourceFormat resourceFormat = 0;
-            HRESULT result = self.GetResourceFormat(&resourceFormat);
-            return std::make_tuple(result, resourceFormat);
-        })
-        .def("CreateJobDecodeAndProcessFrame", [](IBlackmagicRawFrame& self, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobDecodeAndProcessFrame(clipProcessingAttributes, frameProcessingAttributes, &job);
-            return std::make_tuple(result, job);
-        }, "Create a job that will decode and process our image.",
-        py::arg("clipProcessingAttributes").none(true) = nullptr, py::arg("frameProcessingAttributes").none(true) = nullptr)
+        .def("GetFrameIndex",
+            [](IBlackmagicRawFrame& self) {
+                uint64_t frameIndex = 0;
+                HRESULT result = self.GetFrameIndex(&frameIndex);
+                return std::make_tuple(result, frameIndex);
+            },
+            "Get the frame index."
+        )
+        .def("GetTimecode",
+            [](IBlackmagicRawFrame& self) {
+                const char* timecode = nullptr;
+                HRESULT result = self.GetTimecode(&timecode);
+                return std::make_tuple(result, timecode);
+            },
+            "Get a formatted timecode for this frame."
+        )
+        .def("GetMetadataIterator",
+            [](IBlackmagicRawFrame& self) {
+                IBlackmagicRawMetadataIterator* iterator = nullptr;
+                HRESULT result = self.GetMetadataIterator(&iterator);
+                return std::make_tuple(result, iterator);
+            },
+            "Create a metadata iterator for this frame."
+        )
+        .def("GetMetadata",
+            [](IBlackmagicRawFrame& self, const char* key) {
+                Variant value;
+                VariantInit(&value);
+                HRESULT result = self.GetMetadata(key, &value);
+                return std::make_tuple(result, value);
+            },
+            "Query a single frame metadata value by key.",
+            "key"_a
+        )
+        .def("SetMetadata",
+            &IBlackmagicRawFrame::SetMetadata,
+            "Set metadata to this frame.",
+            "key"_a, "value"_a
+        )
+        .def("CloneFrameProcessingAttributes",
+            [](IBlackmagicRawFrame& self) {
+                IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes = nullptr;
+                HRESULT result = self.CloneFrameProcessingAttributes(&frameProcessingAttributes);
+                return std::make_tuple(result, frameProcessingAttributes);
+            },
+            "Create a copy of this frame's processing attributes."
+        )
+        .def("SetResolutionScale",
+            &IBlackmagicRawFrame::SetResolutionScale,
+            "Set the resolution scale we want to decode this image to."
+            "resolutionScale"_a
+        )
+        .def("GetResolutionScale",
+            [](IBlackmagicRawFrame& self) {
+                BlackmagicRawResolutionScale resolutionScale = 0;
+                HRESULT result = self.GetResolutionScale(&resolutionScale);
+                return std::make_tuple(result, resolutionScale);
+            },
+            "Get the resolution scale set to the frame."
+        )
+        .def("SetResourceFormat",
+            &IBlackmagicRawFrame::SetResourceFormat,
+            "Set the desired resource format that we want to process this frame into.",
+            "resourceFormat"_a
+        )
+        .def("GetResourceFormat",
+            [](IBlackmagicRawFrame& self) {
+                BlackmagicRawResourceFormat resourceFormat = 0;
+                HRESULT result = self.GetResourceFormat(&resourceFormat);
+                return std::make_tuple(result, resourceFormat);
+            },
+            "Get the resource format this frame will be processed into."
+        )
+        .def("CreateJobDecodeAndProcessFrame",
+            [](IBlackmagicRawFrame& self, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobDecodeAndProcessFrame(clipProcessingAttributes, frameProcessingAttributes, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job that will decode and process our image.",
+            "clipProcessingAttributes"_a = nullptr, "frameProcessingAttributes"_a = nullptr
+        )
     ;
 
     py::class_<IBlackmagicRawProcessedImage,IUnknown,std::unique_ptr<IBlackmagicRawProcessedImage,Releaser>>(m, "IBlackmagicRawProcessedImage")
-        .def("GetWidth", [](IBlackmagicRawProcessedImage& self) {
-            uint32_t width = 0;
-            HRESULT result = self.GetWidth(&width);
-            return std::make_tuple(result, width);
-        })
-        .def("GetHeight", [](IBlackmagicRawProcessedImage& self) {
-            uint32_t height = 0;
-            HRESULT result = self.GetHeight(&height);
-            return std::make_tuple(result, height);
-        })
-        .def("GetResource", [](IBlackmagicRawProcessedImage& self) {
-            Resource resource = {};
-            HRESULT result = self.GetResource(&resource.data);
-            return std::make_tuple(result, resource);
-        })
-        .def("to_py", [](IBlackmagicRawProcessedImage& self) -> py::array {
-            HRESULT result;
-            BlackmagicRawResourceType type = 0;
-            result = self.GetResourceType(&type);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to query resource type");
-            }
-            if(type != blackmagicRawResourceTypeBufferCPU) {
-                throw py::buffer_error("not a CPU resource");
-            }
-            uint32_t sizeBytes = 0;
-            result = self.GetResourceSizeBytes(&sizeBytes);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to query resource size");
-            }
-            void* resource = nullptr;
-            result = self.GetResource(&resource);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to get resource pointer");
-            }
-            BlackmagicRawResourceFormat format = 0;
-            result = self.GetResourceFormat(&format);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to query resource format");
-            }
-            uint32_t width = 0;
-            result = self.GetWidth(&width);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to query image width");
-            }
-            uint32_t height = 0;
-            result = self.GetHeight(&height);
-            if(result != S_OK) {
-                throw py::buffer_error("failed to query image height");
-            }
-            // The use of a capsule makes this safe. We increment the reference count for the
-            // processed frame and make it the base for the array. This will keep the processed
-            // frame alive for at least as long as the array viewing its data.
-            self.AddRef();
-            py::capsule caps(&self, [](void* ptr) {
-                IBlackmagicRawProcessedImage* self = (IBlackmagicRawProcessedImage*)ptr;
-                self->Release();
-            });
-            switch(format) {
-                case blackmagicRawResourceFormatRGBAU8:
-                case blackmagicRawResourceFormatBGRAU8:
-                    return _resource_to_numpy<uint8_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatRGBU16:
-                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatRGBAU16:
-                case blackmagicRawResourceFormatBGRAU16:
-                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatRGBU16Planar:
-                    return _resource_to_numpy<uint16_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatRGBF32:
-                    return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatRGBF32Planar:
-                    return _resource_to_numpy<float_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
-                case blackmagicRawResourceFormatBGRAF32:
-                    return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
-            }
-            throw py::buffer_error("unsupported resource format");
-        })
-        .def("GetResourceType", [](IBlackmagicRawProcessedImage& self) {
-            BlackmagicRawResourceType type = 0;
-            HRESULT result = self.GetResourceType(&type);
-            return std::make_tuple(result, type);
-        })
-        .def("GetResourceFormat", [](IBlackmagicRawProcessedImage& self) {
-            BlackmagicRawResourceFormat format = 0;
-            HRESULT result = self.GetResourceFormat(&format);
-            return std::make_tuple(result, format);
-        })
-        .def("GetResourceSizeBytes", [](IBlackmagicRawProcessedImage& self) {
-            uint32_t sizeBytes = 0;
-            HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
-            return std::make_tuple(result, sizeBytes);
-        })
+        .def("GetWidth",
+            [](IBlackmagicRawProcessedImage& self) {
+                uint32_t width = 0;
+                HRESULT result = self.GetWidth(&width);
+                return std::make_tuple(result, width);
+            },
+            "Get the width of the processed image."
+        )
+        .def("GetHeight",
+            [](IBlackmagicRawProcessedImage& self) {
+                uint32_t height = 0;
+                HRESULT result = self.GetHeight(&height);
+                return std::make_tuple(result, height);
+            },
+            "Get the height of the processed image."
+        )
+        .def("GetResource",
+            [](IBlackmagicRawProcessedImage& self) {
+                Resource resource = {};
+                HRESULT result = self.GetResource(&resource.data);
+                return std::make_tuple(result, resource);
+            },
+            "Get the resource the image is stored in."
+        )
+        .def("to_py",
+            [](IBlackmagicRawProcessedImage& self) -> py::array {
+                HRESULT result;
+                BlackmagicRawResourceType type = 0;
+                result = self.GetResourceType(&type);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to query resource type");
+                }
+                if(type != blackmagicRawResourceTypeBufferCPU) {
+                    throw py::buffer_error("not a CPU resource");
+                }
+                uint32_t sizeBytes = 0;
+                result = self.GetResourceSizeBytes(&sizeBytes);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to query resource size");
+                }
+                void* resource = nullptr;
+                result = self.GetResource(&resource);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to get resource pointer");
+                }
+                BlackmagicRawResourceFormat format = 0;
+                result = self.GetResourceFormat(&format);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to query resource format");
+                }
+                uint32_t width = 0;
+                result = self.GetWidth(&width);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to query image width");
+                }
+                uint32_t height = 0;
+                result = self.GetHeight(&height);
+                if(result != S_OK) {
+                    throw py::buffer_error("failed to query image height");
+                }
+                // The use of a capsule makes this safe. We increment the reference count for the
+                // processed frame and make it the base for the array. This will keep the processed
+                // frame alive for at least as long as the array viewing its data.
+                self.AddRef();
+                py::capsule caps(&self, [](void* ptr) {
+                    IBlackmagicRawProcessedImage* self = (IBlackmagicRawProcessedImage*)ptr;
+                    self->Release();
+                });
+                switch(format) {
+                    case blackmagicRawResourceFormatRGBAU8:
+                    case blackmagicRawResourceFormatBGRAU8:
+                        return _resource_to_numpy<uint8_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatRGBU16:
+                        return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatRGBAU16:
+                    case blackmagicRawResourceFormatBGRAU16:
+                        return _resource_to_numpy<uint16_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatRGBU16Planar:
+                        return _resource_to_numpy<uint16_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatRGBF32:
+                        return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 3}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatRGBF32Planar:
+                        return _resource_to_numpy<float_t>(std::vector<size_t>{3, height, width}, sizeBytes, resource, caps);
+                    case blackmagicRawResourceFormatBGRAF32:
+                        return _resource_to_numpy<float_t>(std::vector<size_t>{height, width, 4}, sizeBytes, resource, caps);
+                }
+                throw py::buffer_error("unsupported resource format");
+            },
+            "Get the image as a Numpy array."
+        )
+        .def("GetResourceType",
+            [](IBlackmagicRawProcessedImage& self) {
+                BlackmagicRawResourceType type = 0;
+                HRESULT result = self.GetResourceType(&type);
+                return std::make_tuple(result, type);
+            },
+            "Get the memory type of the resource."
+        )
+        .def("GetResourceFormat",
+            [](IBlackmagicRawProcessedImage& self) {
+                BlackmagicRawResourceFormat format = 0;
+                HRESULT result = self.GetResourceFormat(&format);
+                return std::make_tuple(result, format);
+            },
+            "Get the pixel format of the resource."
+        )
+        .def("GetResourceSizeBytes",
+            [](IBlackmagicRawProcessedImage& self) {
+                uint32_t sizeBytes = 0;
+                HRESULT result = self.GetResourceSizeBytes(&sizeBytes);
+                return std::make_tuple(result, sizeBytes);
+            },
+            "Get the size of the resource in bytes."
+        )
         // TODO: Add missing bindings
     ;
 
     py::class_<IBlackmagicRawMetadataIterator,IUnknown,std::unique_ptr<IBlackmagicRawMetadataIterator,Releaser>>(m, "IBlackmagicRawMetadataIterator")
-        .def("Next", &IBlackmagicRawMetadataIterator::Next)
-        .def("GetKey", [](IBlackmagicRawMetadataIterator& self) {
-            const char* key = nullptr;
-            HRESULT result = self.GetKey(&key);
-            return std::make_tuple(result, key);
-        })
-        .def("GetData", [](IBlackmagicRawMetadataIterator& self) {
-            Variant data;
-            VariantInit(&data);
-            HRESULT result = self.GetData(&data);
-            return std::make_tuple(result, data);
-        })
+        .def("Next",
+            &IBlackmagicRawMetadataIterator::Next,
+            "Step to the next metadata entry."
+        )
+        .def("GetKey",
+            [](IBlackmagicRawMetadataIterator& self) {
+                const char* key = nullptr;
+                HRESULT result = self.GetKey(&key);
+                return std::make_tuple(result, key);
+            },
+            "Query the key name of this metadata entry."
+        )
+        .def("GetData",
+            [](IBlackmagicRawMetadataIterator& self) {
+                Variant data;
+                VariantInit(&data);
+                HRESULT result = self.GetData(&data);
+                return std::make_tuple(result, data);
+            },
+            "Query the data in this metadata entry."
+        )
     ;
 
     py::class_<IBlackmagicRawJob,IUnknown,std::unique_ptr<IBlackmagicRawJob,py::nodelete>>(m, "IBlackmagicRawJob")
-        .def("Submit", &IBlackmagicRawJob::Submit)
-        .def("Abort", &IBlackmagicRawJob::Abort)
+        .def("Submit",
+            &IBlackmagicRawJob::Submit,
+            "Submit the job to the decoder, placing it in the decoder's internal queue."
+        )
+        .def("Abort",
+            &IBlackmagicRawJob::Abort,
+            "Abort the job."
+        )
 //        .def("SetUserData", &IBlackmagicRawJob::SetUserData)
 //        .def("GetUserData", [](IBlackmagicRawJob& self) {
 //            void* userData = nullptr;
 //            HRESULT result = self.GetUserData(&userData);
 //            return std::make_tuple(result, userData);
 //        })
-        .def("put_py_user_data", [](IBlackmagicRawJob& self, py::object object) {
-            // Increases the reference count for the Python object. A call to put_py_user_data
-            // should be paired with a call to pop_py_user_data to avoid memory leaks.
-            py::object* ref = new py::object(object);
-            HRESULT result = self.SetUserData((void*)ref);
-            return result;
-        })
-        .def("pop_py_user_data", [](IBlackmagicRawJob& self) -> std::tuple<int, py::object> {
-            void* userData = nullptr;
-            HRESULT result = self.GetUserData(&userData);
-            if(result != S_OK or userData == nullptr) {
-                return std::make_tuple(result, py::none());
-            }
-            py::object object = (*(py::object*)userData);
-            result = self.SetUserData(nullptr);
-            delete (py::object*)userData;
-            return std::make_tuple(result, object);
-        })
+        .def("put_py_user_data",
+            [](IBlackmagicRawJob& self, py::object object) {
+                // Increases the reference count for the Python object. A call to put_py_user_data
+                // should be paired with a call to pop_py_user_data to avoid memory leaks.
+                py::object* ref = new py::object(object);
+                HRESULT result = self.SetUserData((void*)ref);
+                return result;
+            },
+            "Attach a generic Python object to the job. This will result in a memory leak unless `pop_py_user_data` is called later."
+        )
+        .def("pop_py_user_data",
+            [](IBlackmagicRawJob& self) -> std::tuple<int, py::object> {
+                void* userData = nullptr;
+                HRESULT result = self.GetUserData(&userData);
+                if(result != S_OK or userData == nullptr) {
+                    return std::make_tuple(result, py::none());
+                }
+                py::object object = (*(py::object*)userData);
+                result = self.SetUserData(nullptr);
+                delete (py::object*)userData;
+                return std::make_tuple(result, object);
+            },
+            "Retrieve and detach the generic Python object attached to the job."
+        )
     ;
 
     py::class_<IBlackmagicRawClip,IUnknown,std::unique_ptr<IBlackmagicRawClip,Releaser>>(m, "IBlackmagicRawClip")
-        .def("GetWidth", [](IBlackmagicRawClip& self) {
-            uint32_t width = 0;
-            HRESULT result = self.GetWidth(&width);
-            return std::make_tuple(result, width);
-        })
-        .def("GetHeight", [](IBlackmagicRawClip& self) {
-            uint32_t height = 0;
-            HRESULT result = self.GetHeight(&height);
-            return std::make_tuple(result, height);
-        })
-        .def("GetFrameRate", [](IBlackmagicRawClip& self) {
-            float frameRate = 0;
-            HRESULT result = self.GetFrameRate(&frameRate);
-            return std::make_tuple(result, frameRate);
-        })
-        .def("GetFrameCount", [](IBlackmagicRawClip& self) {
-            uint64_t frameCount = 0;
-            HRESULT result = self.GetFrameCount(&frameCount);
-            return std::make_tuple(result, frameCount);
-        })
-        .def("GetTimecodeForFrame", [](IBlackmagicRawClip& self, uint64_t frameIndex) {
-            const char* timecode = nullptr;
-            HRESULT result = self.GetTimecodeForFrame(frameIndex, &timecode);
-            return std::make_tuple(result, timecode);
-        })
-        .def("GetMetadataIterator", [](IBlackmagicRawClip& self) {
-            IBlackmagicRawMetadataIterator* iterator = nullptr;
-            HRESULT result = self.GetMetadataIterator(&iterator);
-            return std::make_tuple(result, iterator);
-        })
-        .def("GetMetadata", [](IBlackmagicRawClip& self, const char* key) {
-            Variant value;
-            VariantInit(&value);
-            HRESULT result = self.GetMetadata(key, &value);
-            return std::make_tuple(result, value);
-        })
-        .def("SetMetadata", &IBlackmagicRawClip::SetMetadata)
-        .def("GetCameraType", [](IBlackmagicRawClip& self) {
-            const char* cameraType = nullptr;
-            HRESULT result = self.GetCameraType(&cameraType);
-            return std::make_tuple(result, cameraType);
-        })
-        .def("CloneClipProcessingAttributes", [](IBlackmagicRawClip& self) {
-            IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes = nullptr;
-            HRESULT result = self.CloneClipProcessingAttributes(&clipProcessingAttributes);
-            return std::make_tuple(result, clipProcessingAttributes);
-        })
-        .def("GetMulticardFileCount", [](IBlackmagicRawClip& self) {
-            uint32_t multicardFileCount = 0;
-            HRESULT result = self.GetMulticardFileCount(&multicardFileCount);
-            return std::make_tuple(result, multicardFileCount);
-        })
-        .def("IsMulticardFilePresent", [](IBlackmagicRawClip& self, uint32_t index) {
-            bool isMulticardFilePresent = false;
-            HRESULT result = self.IsMulticardFilePresent(index, &isMulticardFilePresent);
-            return std::make_tuple(result, isMulticardFilePresent);
-        })
-        .def("GetSidecarFileAttached", [](IBlackmagicRawClip& self) {
-            bool isSidecarFileAttached = false;
-            HRESULT result = self.GetSidecarFileAttached(&isSidecarFileAttached);
-            return std::make_tuple(result, isSidecarFileAttached);
-        })
-        .def("SaveSidecarFile", &IBlackmagicRawClip::SaveSidecarFile)
-        .def("ReloadSidecarFile", &IBlackmagicRawClip::ReloadSidecarFile)
-        .def("CreateJobReadFrame", [](IBlackmagicRawClip& self, uint64_t frameIndex) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobReadFrame(frameIndex, &job);
-            return std::make_tuple(result, job);
-        })
-        .def(
-            "CreateJobTrim",
+        .def("GetWidth",
+            [](IBlackmagicRawClip& self) {
+                uint32_t width = 0;
+                HRESULT result = self.GetWidth(&width);
+                return std::make_tuple(result, width);
+            },
+            "Get the width of frames in the clip."
+        )
+        .def("GetHeight",
+            [](IBlackmagicRawClip& self) {
+                uint32_t height = 0;
+                HRESULT result = self.GetHeight(&height);
+                return std::make_tuple(result, height);
+            },
+            "Get the height of frames in the clip."
+        )
+        .def("GetFrameRate",
+            [](IBlackmagicRawClip& self) {
+                float frameRate = 0;
+                HRESULT result = self.GetFrameRate(&frameRate);
+                return std::make_tuple(result, frameRate);
+            },
+            "Get the frame rate of the clip in frames per second."
+        )
+        .def("GetFrameCount",
+            [](IBlackmagicRawClip& self) {
+                uint64_t frameCount = 0;
+                HRESULT result = self.GetFrameCount(&frameCount);
+                return std::make_tuple(result, frameCount);
+            },
+            "Get the number of frames in the clip."
+        )
+        .def("GetTimecodeForFrame",
+            [](IBlackmagicRawClip& self, uint64_t frameIndex) {
+                const char* timecode = nullptr;
+                HRESULT result = self.GetTimecodeForFrame(frameIndex, &timecode);
+                return std::make_tuple(result, timecode);
+            },
+            "Get the timecode for the specified frame.",
+            "frameIndex"_a
+        )
+        .def("GetMetadataIterator",
+            [](IBlackmagicRawClip& self) {
+                IBlackmagicRawMetadataIterator* iterator = nullptr;
+                HRESULT result = self.GetMetadataIterator(&iterator);
+                return std::make_tuple(result, iterator);
+            },
+            "Create a metadata iterator for this clip."
+        )
+        .def("GetMetadata",
+            [](IBlackmagicRawClip& self, const char* key) {
+                Variant value;
+                VariantInit(&value);
+                HRESULT result = self.GetMetadata(key, &value);
+                return std::make_tuple(result, value);
+            },
+            "Query a single clip metadata value by key.",
+            "key"_a
+        )
+        .def("SetMetadata",
+            &IBlackmagicRawClip::SetMetadata,
+            "Set metadata to this clip.",
+            "key"_a, "value"_a
+        )
+        .def("GetCameraType",
+            [](IBlackmagicRawClip& self) {
+                const char* cameraType = nullptr;
+                HRESULT result = self.GetCameraType(&cameraType);
+                return std::make_tuple(result, cameraType);
+            },
+            "Get the camera type that this clip was recorded on."
+        )
+        .def("CloneClipProcessingAttributes",
+            [](IBlackmagicRawClip& self) {
+                IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes = nullptr;
+                HRESULT result = self.CloneClipProcessingAttributes(&clipProcessingAttributes);
+                return std::make_tuple(result, clipProcessingAttributes);
+            },
+            "Create a copy of this clip's processing attributes."
+        )
+        .def("GetMulticardFileCount",
+            [](IBlackmagicRawClip& self) {
+                uint32_t multicardFileCount = 0;
+                HRESULT result = self.GetMulticardFileCount(&multicardFileCount);
+                return std::make_tuple(result, multicardFileCount);
+            },
+            "Query how many cards this movie was originally recorded onto."
+        )
+        .def("IsMulticardFilePresent",
+            [](IBlackmagicRawClip& self, uint32_t index) {
+                bool isMulticardFilePresent = false;
+                HRESULT result = self.IsMulticardFilePresent(index, &isMulticardFilePresent);
+                return std::make_tuple(result, isMulticardFilePresent);
+            },
+            "Query if a particular card file from the original recording is present.",
+            "index"_a
+        )
+        .def("GetSidecarFileAttached",
+            [](IBlackmagicRawClip& self) {
+                bool isSidecarFileAttached = false;
+                HRESULT result = self.GetSidecarFileAttached(&isSidecarFileAttached);
+                return std::make_tuple(result, isSidecarFileAttached);
+            },
+            "Return whether a relevant .sidecar file was present on disk."
+        )
+        .def("SaveSidecarFile",
+            &IBlackmagicRawClip::SaveSidecarFile,
+            "Save all set metadata and processing attributes to the .sidecar file on disk."
+        )
+        .def("ReloadSidecarFile",
+            &IBlackmagicRawClip::ReloadSidecarFile,
+            "Reload the .sidecar file, replacing unsaved metadata and processing attributes."
+        )
+        .def("CreateJobReadFrame",
+            [](IBlackmagicRawClip& self, uint64_t frameIndex) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobReadFrame(frameIndex, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job that will read the frame's bit stream into memory.",
+            "frameIndex"_a
+        )
+        .def("CreateJobTrim",
             [](IBlackmagicRawClip& self, const char* fileName, uint64_t frameIndex, uint64_t frameCount, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes) {
                 IBlackmagicRawJob* job = nullptr;
                 HRESULT result = self.CreateJobTrim(fileName, frameIndex, frameCount, clipProcessingAttributes, frameProcessingAttributes, &job);
                 return std::make_tuple(result, job);
             },
             "Create a job that will export part of the clip into a new .braw file.",
-            py::arg("fileName"),
-            py::arg("frameIndex"),
-            py::arg("frameCount"),
-            py::arg("clipProcessingAttributes").none(true) = nullptr,
-            py::arg("frameProcessingAttributes").none(true) = nullptr
+            "fileName"_a, "frameIndex"_a, "frameCount"_a,
+            "clipProcessingAttributes"_a = nullptr, "frameProcessingAttributes"_a = nullptr
         )
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipEx)
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
     ;
 
     py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,Releaser>>(m, "IBlackmagicRawConfiguration")
-        .def("SetPipeline", &IBlackmagicRawConfiguration::SetPipeline)
-        .def("GetPipeline", [](IBlackmagicRawConfiguration& self) {
-            BlackmagicRawPipeline pipeline = 0;
-            void* pipelineContextOut = nullptr;
-            void* pipelineCommandQueueOut = nullptr;
-            HRESULT result = self.GetPipeline(&pipeline, &pipelineContextOut, &pipelineCommandQueueOut);
-            return std::make_tuple(result, pipeline, pipelineContextOut, pipelineCommandQueueOut);
-        })
-        .def("IsPipelineSupported", [](IBlackmagicRawConfiguration& self, BlackmagicRawPipeline pipeline) {
-            bool pipelineSupported = 0;
-            HRESULT result = self.IsPipelineSupported(pipeline, &pipelineSupported);
-            return std::make_tuple(result, pipelineSupported);
-        })
-        .def("SetCPUThreads", &IBlackmagicRawConfiguration::SetCPUThreads)
-        .def("GetCPUThreads", [](IBlackmagicRawConfiguration& self) {
-            uint32_t threadCount = 0;
-            HRESULT result = self.GetCPUThreads(&threadCount);
-            return std::make_tuple(result, threadCount);
-        })
-        .def("GetMaxCPUThreadCount", [](IBlackmagicRawConfiguration& self) {
-            uint32_t threadCount = 0;
-            HRESULT result = self.GetMaxCPUThreadCount(&threadCount);
-            return std::make_tuple(result, threadCount);
-        })
-        .def("SetWriteMetadataPerFrame", &IBlackmagicRawConfiguration::SetWriteMetadataPerFrame)
-        .def("GetWriteMetadataPerFrame", [](IBlackmagicRawConfiguration& self) {
-            bool writePerFrame = 0;
-            HRESULT result = self.GetWriteMetadataPerFrame(&writePerFrame);
-            return std::make_tuple(result, writePerFrame);
-        })
-        .def("SetFromDevice", &IBlackmagicRawConfiguration::SetFromDevice)
+        .def("SetPipeline",
+            &IBlackmagicRawConfiguration::SetPipeline,
+            "Set the pipeline to use for decoding.",
+            "pipeline"_a, "pipelineContext"_a, "pipelineCommandQueue"_a
+        )
+        .def("GetPipeline",
+            [](IBlackmagicRawConfiguration& self) {
+                BlackmagicRawPipeline pipeline = 0;
+                void* pipelineContextOut = nullptr;
+                void* pipelineCommandQueueOut = nullptr;
+                HRESULT result = self.GetPipeline(&pipeline, &pipelineContextOut, &pipelineCommandQueueOut);
+                return std::make_tuple(result, pipeline, pipelineContextOut, pipelineCommandQueueOut);
+            },
+            "Get the pipeline used for decoding."
+        )
+        .def("IsPipelineSupported",
+            [](IBlackmagicRawConfiguration& self, BlackmagicRawPipeline pipeline) {
+                bool pipelineSupported = 0;
+                HRESULT result = self.IsPipelineSupported(pipeline, &pipelineSupported);
+                return std::make_tuple(result, pipelineSupported);
+            },
+            "Determine if a pipeline is supported by this machine.",
+            "pipeline"_a
+        )
+        .def("SetCPUThreads",
+            &IBlackmagicRawConfiguration::SetCPUThreads,
+            "Set the number of CPU threads to use while decoding.",
+            "threadCount"_a
+        )
+        .def("GetCPUThreads",
+            [](IBlackmagicRawConfiguration& self) {
+                uint32_t threadCount = 0;
+                HRESULT result = self.GetCPUThreads(&threadCount);
+                return std::make_tuple(result, threadCount);
+            },
+            "Get the number of CPU threads to use while decoding."
+        )
+        .def("GetMaxCPUThreadCount",
+            [](IBlackmagicRawConfiguration& self) {
+                uint32_t threadCount = 0;
+                HRESULT result = self.GetMaxCPUThreadCount(&threadCount);
+                return std::make_tuple(result, threadCount);
+            },
+            "Query the number of hardware threads available on the system."
+        )
+        .def("SetWriteMetadataPerFrame",
+            &IBlackmagicRawConfiguration::SetWriteMetadataPerFrame,
+            "Set whether per-frame metadata will be written to only the relevant frame.",
+            "writePerFrame"_a
+        )
+        .def("GetWriteMetadataPerFrame",
+            [](IBlackmagicRawConfiguration& self) {
+                bool writePerFrame = 0;
+                HRESULT result = self.GetWriteMetadataPerFrame(&writePerFrame);
+                return std::make_tuple(result, writePerFrame);
+            },
+            "Check whether per-frame metadata will be written to only the relevant frame."
+        )
+        .def("SetFromDevice",
+            &IBlackmagicRawConfiguration::SetFromDevice,
+            "Set the instruction set, pipeline, context, and command queue from the device.",
+            "pipelineDevice"_a
+        )
     ;
 
     py::class_<IBlackmagicRawResourceManager,IUnknown,std::unique_ptr<IBlackmagicRawResourceManager,Releaser>>(m, "IBlackmagicRawResourceManager")
-        .def("CreateResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, uint32_t sizeBytes, BlackmagicRawResourceType type, BlackmagicRawResourceUsage usage) {
-            Resource resource = {};
-            HRESULT result = self.CreateResource(context, commandQueue, sizeBytes, type, usage, &resource.data);
-            return std::make_tuple(result, resource);
-        })
-        .def("ReleaseResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType type) {
-            HRESULT result = self.ReleaseResource(context, commandQueue, resource.data, type);
-            return result;
-        })
-        .def("CopyResource", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource source, BlackmagicRawResourceType sourceType, Resource destination, BlackmagicRawResourceType destinationType, uint32_t sizeBytes, bool copyAsync) {
-            HRESULT result = self.CopyResource(context, commandQueue, source.data, sourceType, destination.data, destinationType, sizeBytes, copyAsync);
-            return result;
-        })
-        .def("GetResourceHostPointer", [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType resourceType) {
-            Resource hostPointer = {};
-            HRESULT result = self.GetResourceHostPointer(context, commandQueue, resource.data, resourceType, &hostPointer.data);
-            return std::make_tuple(result, hostPointer);
-        })
+        .def("CreateResource",
+            [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, uint32_t sizeBytes, BlackmagicRawResourceType type, BlackmagicRawResourceUsage usage) {
+                Resource resource = {};
+                HRESULT result = self.CreateResource(context, commandQueue, sizeBytes, type, usage, &resource.data);
+                return std::make_tuple(result, resource);
+            },
+            "Create a new resource.",
+            "context"_a, "commandQueue"_a, "sizeBytes"_a, "type"_a, "usage"_a
+        )
+        .def("ReleaseResource",
+            [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType type) {
+                HRESULT result = self.ReleaseResource(context, commandQueue, resource.data, type);
+                return result;
+            },
+            "Release a resource.",
+            "context"_a, "commandQueue"_a, "resource"_a, "type"_a
+        )
+        .def("CopyResource",
+            [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource source, BlackmagicRawResourceType sourceType, Resource destination, BlackmagicRawResourceType destinationType, uint32_t sizeBytes, bool copyAsync) {
+                HRESULT result = self.CopyResource(context, commandQueue, source.data, sourceType, destination.data, destinationType, sizeBytes, copyAsync);
+                return result;
+            },
+            "Copy a resource",
+            "context"_a, "commandQueue"_a, "source"_a, "sourceType"_a, "destination"_a,
+            "destinationType"_a, "sizeBytes"_a, "copyAsync"_a
+        )
+        .def("GetResourceHostPointer",
+            [](IBlackmagicRawResourceManager& self, void* context, void* commandQueue, Resource resource, BlackmagicRawResourceType resourceType) {
+                void* hostPointer = nullptr;
+                HRESULT result = self.GetResourceHostPointer(context, commandQueue, resource.data, resourceType, &hostPointer);
+                return std::make_tuple(result, hostPointer);
+            },
+            "Obtain a pointer to a resource's host addressable memory.",
+            "context"_a, "commandQueue"_a, "resource"_a, "resourceType"_a
+        )
     ;
 
     py::class_<BlackmagicRawResourceManager,IBlackmagicRawResourceManager,std::unique_ptr<BlackmagicRawResourceManager,Releaser>>(m, "BlackmagicRawResourceManager")
@@ -1092,108 +1322,193 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawConfigurationEx,IUnknown,std::unique_ptr<IBlackmagicRawConfigurationEx,Releaser>>(m, "IBlackmagicRawConfigurationEx")
-        .def("GetResourceManager", [](IBlackmagicRawConfigurationEx& self) {
-            IBlackmagicRawResourceManager* resourceManager = nullptr;
-            HRESULT result = self.GetResourceManager(&resourceManager);
-            return std::make_tuple(result, resourceManager);
-        })
-        .def("SetResourceManager", &IBlackmagicRawConfigurationEx::SetResourceManager)
-        .def("GetInstructionSet", [](IBlackmagicRawConfigurationEx& self) {
-            BlackmagicRawInstructionSet instructionSet = 0;
-            HRESULT result = self.GetInstructionSet(&instructionSet);
-            return std::make_tuple(result, instructionSet);
-        })
-        .def("SetInstructionSet", &IBlackmagicRawConfigurationEx::SetInstructionSet)
+        .def("GetResourceManager",
+            [](IBlackmagicRawConfigurationEx& self) {
+                IBlackmagicRawResourceManager* resourceManager = nullptr;
+                HRESULT result = self.GetResourceManager(&resourceManager);
+                return std::make_tuple(result, resourceManager);
+            },
+            "Get the current resource manager."
+        )
+        .def("SetResourceManager",
+            &IBlackmagicRawConfigurationEx::SetResourceManager,
+            "Set the current resource manager.",
+            "resourceManager"_a
+        )
+        .def("GetInstructionSet",
+            [](IBlackmagicRawConfigurationEx& self) {
+                BlackmagicRawInstructionSet instructionSet = 0;
+                HRESULT result = self.GetInstructionSet(&instructionSet);
+                return std::make_tuple(result, instructionSet);
+            },
+            "Get the CPU instruction set used by the decoder."
+        )
+        .def("SetInstructionSet",
+            &IBlackmagicRawConfigurationEx::SetInstructionSet,
+            "Set the CPU instruction set used by the decoder.",
+            "instructionSet"_a
+        )
     ;
 
     py::class_<IBlackmagicRawManualDecoderFlow1,IUnknown,std::unique_ptr<IBlackmagicRawManualDecoderFlow1,Releaser>>(m, "IBlackmagicRawManualDecoderFlow1")
-        .def("PopulateFrameStateBuffer", [](IBlackmagicRawManualDecoderFlow1& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, Resource frameState, uint32_t frameStateSizeBytes) {
-            HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState.data, frameStateSizeBytes);
-            return result;
-        })
-        .def("GetFrameStateSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self) {
-            uint32_t frameStateSizeBytes = 0;
-            HRESULT result = self.GetFrameStateSizeBytes(&frameStateSizeBytes);
-            return std::make_tuple(result, frameStateSizeBytes);
-        })
-        .def("GetDecodedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
-            uint32_t decodedSizeBytes = 0;
-            HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU.data, &decodedSizeBytes);
-            return std::make_tuple(result, decodedSizeBytes);
-        })
-        .def("GetProcessedSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
-            uint32_t processedSizeBytes = 0;
-            HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU.data, &processedSizeBytes);
-            return std::make_tuple(result, processedSizeBytes);
-        })
-        .def("GetPost3DLUTSizeBytes", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
-            uint32_t post3DLUTSizeBytes = 0;
-            HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU.data, &post3DLUTSizeBytes);
-            return std::make_tuple(result, post3DLUTSizeBytes);
-        })
-        .def("CreateJobDecode", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource bitStreamBufferCPU, Resource decodedBufferCPU) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobDecode(frameStateBufferCPU.data, bitStreamBufferCPU.data, decodedBufferCPU.data, &job);
-            return std::make_tuple(result, job);
-        })
-        .def("CreateJobProcess", [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource decodedBufferCPU, Resource processedBufferCPU, Resource post3DLUTBufferCPU) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobProcess(frameStateBufferCPU.data, decodedBufferCPU.data, processedBufferCPU.data, post3DLUTBufferCPU.data, &job);
-            return std::make_tuple(result, job);
-        })
+        .def("PopulateFrameStateBuffer",
+            [](IBlackmagicRawManualDecoderFlow1& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, Resource frameState, uint32_t frameStateSizeBytes) {
+                HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState.data, frameStateSizeBytes);
+                return result;
+            },
+            "Convert the internal state of an IBlackmagicRawFrame to a frame state buffer.",
+            "frame"_a, "clipProcessingAttributes"_a, "frameProcessingAttributes"_a, "frameState"_a, "frameStateSizeBytes"_a
+        )
+        .def("GetFrameStateSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow1& self) {
+                uint32_t frameStateSizeBytes = 0;
+                HRESULT result = self.GetFrameStateSizeBytes(&frameStateSizeBytes);
+                return std::make_tuple(result, frameStateSizeBytes);
+            },
+            "Query the size of the frame state buffer in bytes."
+        )
+        .def("GetDecodedSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
+                uint32_t decodedSizeBytes = 0;
+                HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU.data, &decodedSizeBytes);
+                return std::make_tuple(result, decodedSizeBytes);
+            },
+            "Query the size of the decoded buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("GetProcessedSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
+                uint32_t processedSizeBytes = 0;
+                HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU.data, &processedSizeBytes);
+                return std::make_tuple(result, processedSizeBytes);
+            },
+            "Query the size of the processed buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("GetPost3DLUTSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU) {
+                uint32_t post3DLUTSizeBytes = 0;
+                HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU.data, &post3DLUTSizeBytes);
+                return std::make_tuple(result, post3DLUTSizeBytes);
+            },
+            "Query the size of the post 3D LUT buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("CreateJobDecode",
+            [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource bitStreamBufferCPU, Resource decodedBufferCPU) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobDecode(frameStateBufferCPU.data, bitStreamBufferCPU.data, decodedBufferCPU.data, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job to decode a frame.",
+            "frameStateBufferCPU"_a, "bitStreamBufferCPU"_a, "decodedBufferCPU"_a
+        )
+        .def("CreateJobProcess",
+            [](IBlackmagicRawManualDecoderFlow1& self, Resource frameStateBufferCPU, Resource decodedBufferCPU, Resource processedBufferCPU, Resource post3DLUTBufferCPU) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobProcess(frameStateBufferCPU.data, decodedBufferCPU.data, processedBufferCPU.data, post3DLUTBufferCPU.data, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job to process a frame.",
+            "frameStateBufferCPU"_a, "decodedBufferCPU"_a, "processedBufferCPU"_a, "post3DLUTBufferCPU"_a
+        )
     ;
 
     py::class_<IBlackmagicRawManualDecoderFlow2,IUnknown,std::unique_ptr<IBlackmagicRawManualDecoderFlow2,Releaser>>(m, "IBlackmagicRawManualDecoderFlow2")
-        .def("PopulateFrameStateBuffer", [](IBlackmagicRawManualDecoderFlow2& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, Resource frameState, uint32_t frameStateSizeBytes) {
-            HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState.data, frameStateSizeBytes);
-            return result;
-        })
-        .def("GetFrameStateSizeBytes", [](IBlackmagicRawManualDecoderFlow2& self) {
-            uint32_t frameStateSizeBytes = 0;
-            HRESULT result = self.GetFrameStateSizeBytes(&frameStateSizeBytes);
-            return std::make_tuple(result, frameStateSizeBytes);
-        })
-        .def("GetDecodedSizeBytes", [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
-            uint32_t decodedSizeBytes = 0;
-            HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU.data, &decodedSizeBytes);
-            return std::make_tuple(result, decodedSizeBytes);
-        })
-        .def("GetWorkingSizeBytes", [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
-            uint32_t workingSizeBytes = 0;
-            HRESULT result = self.GetWorkingSizeBytes(frameStateBufferCPU.data, &workingSizeBytes);
-            return std::make_tuple(result, workingSizeBytes);
-        })
-        .def("GetProcessedSizeBytes", [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
-            uint32_t processedSizeBytes = 0;
-            HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU.data, &processedSizeBytes);
-            return std::make_tuple(result, processedSizeBytes);
-        })
-        .def("GetPost3DLUTSizeBytes", [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
-            uint32_t post3DLUTSizeBytes = 0;
-            HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU.data, &post3DLUTSizeBytes);
-            return std::make_tuple(result, post3DLUTSizeBytes);
-        })
-        .def("CreateJobDecode", [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU, Resource bitStreamBufferCPU, Resource decodedBufferCPU) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobDecode(frameStateBufferCPU.data, bitStreamBufferCPU.data, decodedBufferCPU.data, &job);
-            return std::make_tuple(result, job);
-        })
-        .def("CreateJobProcess", [](IBlackmagicRawManualDecoderFlow2& self, void* context, void* commandQueue, Resource frameStateBufferCPU, Resource decodedBufferGPU, Resource workingBufferGpu, Resource processedBufferGPU, Resource post3DLUTBufferGPU) {
-            IBlackmagicRawJob* job = nullptr;
-            HRESULT result = self.CreateJobProcess(context, commandQueue, frameStateBufferCPU.data, decodedBufferGPU.data, workingBufferGpu.data, processedBufferGPU.data, post3DLUTBufferGPU.data, &job);
-            return std::make_tuple(result, job);
-        })
+        .def("PopulateFrameStateBuffer",
+            [](IBlackmagicRawManualDecoderFlow2& self, IBlackmagicRawFrame* frame, IBlackmagicRawClipProcessingAttributes* clipProcessingAttributes, IBlackmagicRawFrameProcessingAttributes* frameProcessingAttributes, Resource frameState, uint32_t frameStateSizeBytes) {
+                HRESULT result = self.PopulateFrameStateBuffer(frame, clipProcessingAttributes, frameProcessingAttributes, frameState.data, frameStateSizeBytes);
+                return result;
+            },
+            "Convert the internal state of an IBlackmagicRawFrame to a frame state buffer.",
+            "frame"_a, "clipProcessingAttributes"_a, "frameProcessingAttributes"_a, "frameState"_a, "frameStateSizeBytes"_a
+        )
+        .def("GetFrameStateSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow2& self) {
+                uint32_t frameStateSizeBytes = 0;
+                HRESULT result = self.GetFrameStateSizeBytes(&frameStateSizeBytes);
+                return std::make_tuple(result, frameStateSizeBytes);
+            },
+            "Query the size of the frame state buffer in bytes."
+        )
+        .def("GetDecodedSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
+                uint32_t decodedSizeBytes = 0;
+                HRESULT result = self.GetDecodedSizeBytes(frameStateBufferCPU.data, &decodedSizeBytes);
+                return std::make_tuple(result, decodedSizeBytes);
+            },
+            "Query the size of the decoded buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("GetWorkingSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
+                uint32_t workingSizeBytes = 0;
+                HRESULT result = self.GetWorkingSizeBytes(frameStateBufferCPU.data, &workingSizeBytes);
+                return std::make_tuple(result, workingSizeBytes);
+            },
+            "Query the size of the working buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("GetProcessedSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
+                uint32_t processedSizeBytes = 0;
+                HRESULT result = self.GetProcessedSizeBytes(frameStateBufferCPU.data, &processedSizeBytes);
+                return std::make_tuple(result, processedSizeBytes);
+            },
+            "Query the size of the processed buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("GetPost3DLUTSizeBytes",
+            [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU) {
+                uint32_t post3DLUTSizeBytes = 0;
+                HRESULT result = self.GetPost3DLUTSizeBytes(frameStateBufferCPU.data, &post3DLUTSizeBytes);
+                return std::make_tuple(result, post3DLUTSizeBytes);
+            },
+            "Query the size of the post 3D LUT buffer in bytes.",
+            "frameStateBufferCPU"_a
+        )
+        .def("CreateJobDecode",
+            [](IBlackmagicRawManualDecoderFlow2& self, Resource frameStateBufferCPU, Resource bitStreamBufferCPU, Resource decodedBufferCPU) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobDecode(frameStateBufferCPU.data, bitStreamBufferCPU.data, decodedBufferCPU.data, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job to decode a frame.",
+            "frameStateBufferCPU"_a, "bitStreamBufferCPU"_a, "decodedBufferCPU"_a
+        )
+        .def("CreateJobProcess",
+            [](IBlackmagicRawManualDecoderFlow2& self, void* context, void* commandQueue, Resource frameStateBufferCPU, Resource decodedBufferGPU, Resource workingBufferGpu, Resource processedBufferGPU, Resource post3DLUTBufferGPU) {
+                IBlackmagicRawJob* job = nullptr;
+                HRESULT result = self.CreateJobProcess(context, commandQueue, frameStateBufferCPU.data, decodedBufferGPU.data, workingBufferGpu.data, processedBufferGPU.data, post3DLUTBufferGPU.data, &job);
+                return std::make_tuple(result, job);
+            },
+            "Create a job to process a frame.",
+            "context"_a, "commandQueue"_a, "frameStateBufferCPU"_a, "decodedBufferGPU"_a,
+            "workingBufferGPU"_a, "processedBufferGPU"_a, "post3DLUTBufferGPU"_a
+        )
     ;
 
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,Releaser>>(m, "IBlackmagicRaw")
-        .def("OpenClip", [](IBlackmagicRaw& self, const char* fileName) {
-            IBlackmagicRawClip* clip = nullptr;
-            HRESULT result = self.OpenClip(fileName, &clip);
-            return std::make_tuple(result, clip);
-        })
-        .def("SetCallback", &IBlackmagicRaw::SetCallback)
+        .def("OpenClip",
+            [](IBlackmagicRaw& self, const char* fileName) {
+                IBlackmagicRawClip* clip = nullptr;
+                HRESULT result = self.OpenClip(fileName, &clip);
+                return std::make_tuple(result, clip);
+            },
+            "Open a clip.",
+            "fileName"_a
+        )
+        .def("SetCallback",
+            &IBlackmagicRaw::SetCallback,
+            "Register a callback with the codec object.",
+            "callback"_a
+        )
         // TODO: Add missing bindings
-        .def("FlushJobs", &IBlackmagicRaw::FlushJobs, py::call_guard<py::gil_scoped_release>())
+        .def("FlushJobs",
+            &IBlackmagicRaw::FlushJobs,
+            py::call_guard<py::gil_scoped_release>(),
+            "Wait for all jobs to complete."
+        )
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConfiguration)
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConfigurationEx)
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawManualDecoderFlow1)
@@ -1201,114 +1516,184 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,Releaser>>(m, "IBlackmagicRawPipelineIterator")
-        .def("Next", &IBlackmagicRawPipelineIterator::Next)
-        .def("GetName", [](IBlackmagicRawPipelineIterator& self) {
-            const char* pipelineName = nullptr;
-            HRESULT result = self.GetName(&pipelineName);
-            return std::make_tuple(result, pipelineName);
-        })
-        .def("GetInterop", [](IBlackmagicRawPipelineIterator& self) {
-            BlackmagicRawInterop interop = 0;
-            HRESULT result = self.GetInterop(&interop);
-            return std::make_tuple(result, interop);
-        })
-        .def("GetPipeline", [](IBlackmagicRawPipelineIterator& self) {
-            BlackmagicRawPipeline pipeline = 0;
-            HRESULT result = self.GetPipeline(&pipeline);
-            return std::make_tuple(result, pipeline);
-        })
+        .def("Next",
+            &IBlackmagicRawPipelineIterator::Next,
+            "Step to the next pipeline entry."
+        )
+        .def("GetName",
+            [](IBlackmagicRawPipelineIterator& self) {
+                const char* pipelineName = nullptr;
+                HRESULT result = self.GetName(&pipelineName);
+                return std::make_tuple(result, pipelineName);
+            },
+            "Get the name of the pipeline."
+        )
+        .def("GetInterop",
+            [](IBlackmagicRawPipelineIterator& self) {
+                BlackmagicRawInterop interop = 0;
+                HRESULT result = self.GetInterop(&interop);
+                return std::make_tuple(result, interop);
+            },
+            "Get the interoperability of the pipeline."
+        )
+        .def("GetPipeline",
+            [](IBlackmagicRawPipelineIterator& self) {
+                BlackmagicRawPipeline pipeline = 0;
+                HRESULT result = self.GetPipeline(&pipeline);
+                return std::make_tuple(result, pipeline);
+            },
+            "Get the pipeline."
+        )
     ;
 
     py::class_<IBlackmagicRawOpenGLInteropHelper,IUnknown,std::unique_ptr<IBlackmagicRawOpenGLInteropHelper,Releaser>>(m, "IBlackmagicRawOpenGLInteropHelper")
-        .def("GetPreferredResourceFormat", [](IBlackmagicRawOpenGLInteropHelper& self) {
-            BlackmagicRawResourceFormat preferredFormat = 0;
-            HRESULT result = self.GetPreferredResourceFormat(&preferredFormat);
-            return std::make_tuple(result, preferredFormat);
-        })
-        .def("SetImage", [](IBlackmagicRawOpenGLInteropHelper& self, IBlackmagicRawProcessedImage* processedImage) {
-            uint32_t openGLTextureName = 0;
-            int32_t openGLTextureTarget = 0;
-            HRESULT result = self.SetImage(processedImage, &openGLTextureName, &openGLTextureTarget);
-            return std::make_tuple(result, openGLTextureName, openGLTextureTarget);
-        })
+        .def("GetPreferredResourceFormat",
+            [](IBlackmagicRawOpenGLInteropHelper& self) {
+                BlackmagicRawResourceFormat preferredFormat = 0;
+                HRESULT result = self.GetPreferredResourceFormat(&preferredFormat);
+                return std::make_tuple(result, preferredFormat);
+            },
+            "Get the preferred resource format for interaction between the device and OpenGL."
+        )
+        .def("SetImage",
+            [](IBlackmagicRawOpenGLInteropHelper& self, IBlackmagicRawProcessedImage* processedImage) {
+                uint32_t openGLTextureName = 0;
+                int32_t openGLTextureTarget = 0;
+                HRESULT result = self.SetImage(processedImage, &openGLTextureName, &openGLTextureTarget);
+                return std::make_tuple(result, openGLTextureName, openGLTextureTarget);
+            },
+            "Copy the processed image into an OpenGL texture.",
+            "processedImage"_a
+        )
     ;
 
     py::class_<IBlackmagicRawPipelineDevice,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDevice,Releaser>>(m, "IBlackmagicRawPipelineDevice")
-        .def("SetBestInstructionSet", &IBlackmagicRawPipelineDevice::SetBestInstructionSet)
-        .def("SetInstructionSet", &IBlackmagicRawPipelineDevice::SetInstructionSet)
-        .def("GetInstructionSet", [](IBlackmagicRawPipelineDevice& self) {
-            BlackmagicRawInstructionSet instructionSet = 0;
-            HRESULT result = self.GetInstructionSet(&instructionSet);
-            return std::make_tuple(result, instructionSet);
-        })
-        .def("GetIndex", [](IBlackmagicRawPipelineDevice& self) {
-            uint32_t deviceIndex = 0;
-            HRESULT result = self.GetIndex(&deviceIndex);
-            return std::make_tuple(result, deviceIndex);
-        })
-        .def("GetName", [](IBlackmagicRawPipelineDevice& self) {
-            const char* name = nullptr;
-            HRESULT result = self.GetName(&name);
-            return std::make_tuple(result, name);
-        })
-        .def("GetInterop", [](IBlackmagicRawPipelineDevice& self) {
-            BlackmagicRawInterop interop = 0;
-            HRESULT result = self.GetInterop(&interop);
-            return std::make_tuple(result, interop);
-        })
-        .def("GetPipeline", [](IBlackmagicRawPipelineDevice& self) {
-            BlackmagicRawPipeline pipeline = 0;
-            void* context = nullptr;
-            void* commandQueue = nullptr;
-            HRESULT result = self.GetPipeline(&pipeline, &context, &commandQueue);
-            return std::make_tuple(result, pipeline, context, commandQueue);
-        })
-        .def("GetPipelineName", [](IBlackmagicRawPipelineDevice& self) {
-            const char* pipelineName = nullptr;
-            HRESULT result = self.GetPipelineName(&pipelineName);
-            return std::make_tuple(result, pipelineName);
-        })
-        .def("GetOpenGLInteropHelper", [](IBlackmagicRawPipelineDevice& self) {
-            IBlackmagicRawOpenGLInteropHelper* interopHelper = nullptr;
-            HRESULT result = self.GetOpenGLInteropHelper(&interopHelper);
-            return std::make_tuple(result, interopHelper);
-        })
+        .def("SetBestInstructionSet",
+            &IBlackmagicRawPipelineDevice::SetBestInstructionSet,
+            "Set the CPU instruction set of the device according to the best system capabilities."
+        )
+        .def("SetInstructionSet",
+            &IBlackmagicRawPipelineDevice::SetInstructionSet,
+            "Set the CPU instruction set to use for the device.",
+            "instructionSet"_a
+        )
+        .def("GetInstructionSet",
+            [](IBlackmagicRawPipelineDevice& self) {
+                BlackmagicRawInstructionSet instructionSet = 0;
+                HRESULT result = self.GetInstructionSet(&instructionSet);
+                return std::make_tuple(result, instructionSet);
+            },
+            "Get the CPU instruction set of the device."
+        )
+        .def("GetIndex",
+            [](IBlackmagicRawPipelineDevice& self) {
+                uint32_t deviceIndex = 0;
+                HRESULT result = self.GetIndex(&deviceIndex);
+                return std::make_tuple(result, deviceIndex);
+            },
+            "Get the index of the device in the pipeline's device list."
+        )
+        .def("GetName",
+            [](IBlackmagicRawPipelineDevice& self) {
+                const char* name = nullptr;
+                HRESULT result = self.GetName(&name);
+                return std::make_tuple(result, name);
+            },
+            "Get the name of the device."
+        )
+        .def("GetInterop",
+            [](IBlackmagicRawPipelineDevice& self) {
+                BlackmagicRawInterop interop = 0;
+                HRESULT result = self.GetInterop(&interop);
+                return std::make_tuple(result, interop);
+            },
+            "Get the API interoperability of the device."
+        )
+        .def("GetPipeline",
+            [](IBlackmagicRawPipelineDevice& self) {
+                BlackmagicRawPipeline pipeline = 0;
+                void* context = nullptr;
+                void* commandQueue = nullptr;
+                HRESULT result = self.GetPipeline(&pipeline, &context, &commandQueue);
+                return std::make_tuple(result, pipeline, context, commandQueue);
+            },
+            "Get the pipeline configuration information associated with the device."
+        )
+        .def("GetPipelineName",
+            [](IBlackmagicRawPipelineDevice& self) {
+                const char* pipelineName = nullptr;
+                HRESULT result = self.GetPipelineName(&pipelineName);
+                return std::make_tuple(result, pipelineName);
+            },
+            "Get the name of the pipeline associated with the device."
+        )
+        .def("GetOpenGLInteropHelper",
+            [](IBlackmagicRawPipelineDevice& self) {
+                IBlackmagicRawOpenGLInteropHelper* interopHelper = nullptr;
+                HRESULT result = self.GetOpenGLInteropHelper(&interopHelper);
+                return std::make_tuple(result, interopHelper);
+            },
+            "Create a helper to get the results of a processed image as an OpenGL texture."
+        )
     ;
 
     py::class_<IBlackmagicRawPipelineDeviceIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineDeviceIterator,Releaser>>(m, "IBlackmagicRawPipelineDeviceIterator")
-        .def("Next", &IBlackmagicRawPipelineDeviceIterator::Next)
-        .def("GetPipeline", [](IBlackmagicRawPipelineDeviceIterator& self) {
-            BlackmagicRawPipeline pipeline = 0;
-            HRESULT result = self.GetPipeline(&pipeline);
-            return std::make_tuple(result, pipeline);
-        })
-        .def("GetInterop", [](IBlackmagicRawPipelineDeviceIterator& self) {
-            BlackmagicRawInterop interop = 0;
-            HRESULT result = self.GetInterop(&interop);
-            return std::make_tuple(result, interop);
-        })
-        .def("CreateDevice", [](IBlackmagicRawPipelineDeviceIterator& self) {
-            IBlackmagicRawPipelineDevice* pipelineDevice = nullptr;
-            HRESULT result = self.CreateDevice(&pipelineDevice);
-            return std::make_tuple(result, pipelineDevice);
-        })
+        .def("Next",
+            &IBlackmagicRawPipelineDeviceIterator::Next,
+            "Step to the next device entry."
+        )
+        .def("GetPipeline",
+            [](IBlackmagicRawPipelineDeviceIterator& self) {
+                BlackmagicRawPipeline pipeline = 0;
+                HRESULT result = self.GetPipeline(&pipeline);
+                return std::make_tuple(result, pipeline);
+            },
+            "Get the pipeline."
+        )
+        .def("GetInterop",
+            [](IBlackmagicRawPipelineDeviceIterator& self) {
+                BlackmagicRawInterop interop = 0;
+                HRESULT result = self.GetInterop(&interop);
+                return std::make_tuple(result, interop);
+            },
+            "Get the interoperability of the device's pipeline."
+        )
+        .def("CreateDevice",
+            [](IBlackmagicRawPipelineDeviceIterator& self) {
+                IBlackmagicRawPipelineDevice* pipelineDevice = nullptr;
+                HRESULT result = self.CreateDevice(&pipelineDevice);
+                return std::make_tuple(result, pipelineDevice);
+            },
+            "Create the pipeline device (container for context and command queue)."
+        )
     ;
 
     py::class_<IBlackmagicRawFactory,IUnknown,std::unique_ptr<IBlackmagicRawFactory,Releaser>>(m, "IBlackmagicRawFactory")
-        .def("CreateCodec", [](IBlackmagicRawFactory& self) {
-            IBlackmagicRaw* codec = nullptr;
-            HRESULT result = self.CreateCodec(&codec);
-            return std::make_tuple(result, codec);
-        })
-        .def("CreatePipelineIterator", [](IBlackmagicRawFactory& self, BlackmagicRawInterop interop) {
-            IBlackmagicRawPipelineIterator* pipelineIterator = nullptr;
-            HRESULT result = self.CreatePipelineIterator(interop, &pipelineIterator);
-            return std::make_tuple(result, pipelineIterator);
-        })
-        .def("CreatePipelineDeviceIterator", [](IBlackmagicRawFactory& self, BlackmagicRawPipeline pipeline, BlackmagicRawInterop interop) {
-            IBlackmagicRawPipelineDeviceIterator* deviceIterator = nullptr;
-            HRESULT result = self.CreatePipelineDeviceIterator(pipeline, interop, &deviceIterator);
-            return std::make_tuple(result, deviceIterator);
-        })
+        .def("CreateCodec",
+            [](IBlackmagicRawFactory& self) {
+                IBlackmagicRaw* codec = nullptr;
+                HRESULT result = self.CreateCodec(&codec);
+                return std::make_tuple(result, codec);
+            },
+            "Create a codec from the factory."
+        )
+        .def("CreatePipelineIterator",
+            [](IBlackmagicRawFactory& self, BlackmagicRawInterop interop) {
+                IBlackmagicRawPipelineIterator* pipelineIterator = nullptr;
+                HRESULT result = self.CreatePipelineIterator(interop, &pipelineIterator);
+                return std::make_tuple(result, pipelineIterator);
+            },
+            "Create a pipeline iterator from the factory.",
+            "interop"_a
+        )
+        .def("CreatePipelineDeviceIterator",
+            [](IBlackmagicRawFactory& self, BlackmagicRawPipeline pipeline, BlackmagicRawInterop interop) {
+                IBlackmagicRawPipelineDeviceIterator* deviceIterator = nullptr;
+                HRESULT result = self.CreatePipelineDeviceIterator(pipeline, interop, &deviceIterator);
+                return std::make_tuple(result, deviceIterator);
+            },
+            "Create a pipeline device iterator from the factory.",
+            "pipeline"_a, "interop"_a
+        )
     ;
 }

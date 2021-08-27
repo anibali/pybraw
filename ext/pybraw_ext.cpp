@@ -284,8 +284,9 @@ public:
     void PreparePipelineComplete(void* userData, HRESULT result) override {
         py::gil_scoped_acquire gil;
         py::function pyfunc = py::get_override(this, "PreparePipelineComplete");
+        py::object userDataPy = UserDataToPython(userData, true);
         if(pyfunc) {
-            pyfunc(userData, result);
+            pyfunc(userDataPy, result);
         }
     }
 };
@@ -1534,7 +1535,20 @@ PYBIND11_MODULE(_pybraw, m) {
             "Register a callback with the codec object.",
             "callback"_a
         )
-        // TODO: Add missing bindings
+        .def("PreparePipeline",
+            [](IBlackmagicRaw& self, BlackmagicRawPipeline pipeline, void* pipelineContext, void* pipelineCommandQueue, py::object userData) {
+                return self.PreparePipeline(pipeline, pipelineContext, pipelineCommandQueue, UserDataCreate(userData));
+            },
+            "Asynchronously prepare the pipeline for decoding.",
+            "pipeline"_a, "pipelineContext"_a, "pipelineCommandQueue"_a, "userData"_a
+        )
+        .def("PreparePipelineForDevice",
+            [](IBlackmagicRaw& self, IBlackmagicRawPipelineDevice* pipelineDevice, py::object userData) {
+                return self.PreparePipelineForDevice(pipelineDevice, UserDataCreate(userData));
+            },
+            "Asynchronously prepare the pipeline for decoding.",
+            "pipelineDevice"_a, "userData"_a
+        )
         .def("FlushJobs",
             &IBlackmagicRaw::FlushJobs,
             py::call_guard<py::gil_scoped_release>(),

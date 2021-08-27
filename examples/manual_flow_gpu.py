@@ -139,7 +139,7 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         self.job_counter = job_counter
 
     def ReadComplete(self, read_job, result, frame):
-        user_data: UserData = verify(read_job.pop_py_user_data())
+        user_data: UserData = verify(read_job.PopUserData())
 
         if result == _pybraw.S_OK:
             log.info(f'Read frame index: {user_data.frame_index}')
@@ -153,12 +153,12 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
         buffer_manager.populate_frame_state_buffer(frame)
 
         decode_job = buffer_manager.create_decode_job()
-        verify(decode_job.put_py_user_data(user_data))
+        verify(decode_job.SetUserData(user_data))
         verify(decode_job.Submit())
         decode_job.Release()
 
     def DecodeComplete(self, decode_job, result):
-        user_data: UserData = verify(decode_job.pop_py_user_data())
+        user_data: UserData = verify(decode_job.PopUserData())
 
         if result == _pybraw.S_OK:
             log.info(f'Decoded frame index: {user_data.frame_index}')
@@ -169,12 +169,12 @@ class CameraCodecCallback(_pybraw.BlackmagicRawCallback):
 
         buffer_manager = user_data.buffer_manager
         process_job = buffer_manager.create_process_job()
-        verify(process_job.put_py_user_data(user_data))
+        verify(process_job.SetUserData(user_data))
         verify(process_job.Submit())
         process_job.Release()
 
     def ProcessComplete(self, process_job, result, processed_image):
-        user_data: UserData = verify(process_job.pop_py_user_data())
+        user_data: UserData = verify(process_job.PopUserData())
 
         if result == _pybraw.S_OK:
             log.info(f'Processed frame index: {user_data.frame_index}')
@@ -213,7 +213,7 @@ def process_clip_manual(clip: _pybraw.IBlackmagicRawClip, resource_manager, manu
         buffer_manager = buffer_manager_pool[frame_index % len(buffer_manager_pool)]
         read_job = buffer_manager.create_read_job(clip_ex, frame_index)
         user_data = UserData(buffer_manager, frame_index)
-        verify(read_job.put_py_user_data(user_data))
+        verify(read_job.SetUserData(user_data))
         verify(read_job.Submit())
         read_job.Release()
 

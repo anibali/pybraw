@@ -17,6 +17,29 @@ using namespace pybind11::literals;
 }, "Get the "#T" interface to this "#S)
 
 
+void* UserDataCreate(py::object object) {
+    // Add one new reference to the Python object.
+    py::object* ref = new py::object(object);
+    // Return the new reference as a void*.
+    return static_cast<void*>(ref);
+}
+
+
+py::object UserDataToPython(void* userData, bool release) {
+    if(userData == nullptr) {
+        return py::none();
+    }
+    py::object* ref = static_cast<py::object*>(userData);
+    py::object object = *ref;
+    // Decrease the reference count on the Python object.
+    if(release) {
+        delete ref;
+    }
+    // Return the Python object.
+    return object;
+}
+
+
 class Releaser {
 public:
     void operator() (IUnknown* obj) {
@@ -1044,32 +1067,40 @@ PYBIND11_MODULE(_pybraw, m) {
             &IBlackmagicRawJob::Abort,
             "Abort the job."
         )
-//        .def("SetUserData", &IBlackmagicRawJob::SetUserData)
-//        .def("GetUserData", [](IBlackmagicRawJob& self) {
-//            void* userData = nullptr;
-//            HRESULT result = self.GetUserData(&userData);
-//            return std::make_tuple(result, userData);
-//        })
-        .def("put_py_user_data",
+        .def("SetUserData",
             [](IBlackmagicRawJob& self, py::object object) {
-                // Increases the reference count for the Python object. A call to put_py_user_data
-                // should be paired with a call to pop_py_user_data to avoid memory leaks.
-                py::object* ref = new py::object(object);
-                HRESULT result = self.SetUserData((void*)ref);
-                return result;
+                // If there is already user data attached to the job, release it.
+                void* userData = nullptr;
+                self.GetUserData(&userData);
+                UserDataToPython(userData, true);
+                // Set the user data.
+                return self.SetUserData(UserDataCreate(object));
             },
-            "Attach a generic Python object to the job. This will result in a memory leak unless `pop_py_user_data` is called later."
+            "Attach a generic Python object attached to the job."
+            "\n\n"
+            "This will cause a memory leak if the job is deleted with user data still attached."
+            "You can avoid this by ensuring that `PopUserData()` is called prior to the deletion"
+            "of the job object.",
+            "userData"_a
         )
-        .def("pop_py_user_data",
+        .def("GetUserData",
+            [](IBlackmagicRawJob& self) {
+                void* userData = nullptr;
+                HRESULT result = self.GetUserData(&userData);
+                py::object object = UserDataToPython(userData, false);
+                return std::make_tuple(result, object);
+            },
+            "Retrieve the generic Python object attached to the job."
+        )
+        .def("PopUserData",
             [](IBlackmagicRawJob& self) -> std::tuple<int, py::object> {
                 void* userData = nullptr;
                 HRESULT result = self.GetUserData(&userData);
-                if(result != S_OK or userData == nullptr) {
-                    return std::make_tuple(result, py::none());
+                py::object object = UserDataToPython(userData, true);
+                HRESULT resultSet = self.SetUserData(nullptr);
+                if(SUCCEEDED(result)) {
+                    result = resultSet;
                 }
-                py::object object = (*(py::object*)userData);
-                result = self.SetUserData(nullptr);
-                delete (py::object*)userData;
                 return std::make_tuple(result, object);
             },
             "Retrieve and detach the generic Python object attached to the job."

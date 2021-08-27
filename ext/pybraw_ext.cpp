@@ -735,6 +735,36 @@ PYBIND11_MODULE(_pybraw, m) {
         )
     ;
 
+    py::class_<IBlackmagicRawClipResolutions,IUnknown,std::unique_ptr<IBlackmagicRawClipResolutions,Releaser>>(m, "IBlackmagicRawClipResolutions")
+        .def("GetResolutionCount",
+            [](IBlackmagicRawClipResolutions& self) {
+                uint32_t resolutionCount = 0;
+                HRESULT result = self.GetResolutionCount(&resolutionCount);
+                return std::make_tuple(result, resolutionCount);
+            },
+            "Return the number of resolutions at which the clip may be processed."
+        )
+        .def("GetResolution",
+            [](IBlackmagicRawClipResolutions& self, uint32_t resolutionIndex) {
+                uint32_t resolutionWidthPixels = 0;
+                uint32_t resolutionHeightPixels = 0;
+                HRESULT result = self.GetResolution(resolutionIndex, &resolutionWidthPixels, &resolutionHeightPixels);
+                return std::make_tuple(result, resolutionWidthPixels, resolutionHeightPixels);
+            },
+            "Return a resolution at which the clip may be processed.",
+            "resolutionIndex"_a
+        )
+        .def("GetClosestScaleForResolution",
+            [](IBlackmagicRawClipResolutions& self, uint32_t resolutionWidthPixels, uint32_t resolutionHeightPixels, bool requestUpsideDown) {
+                BlackmagicRawResolutionScale resolutionScale = 0;
+                HRESULT result = self.GetClosestScaleForResolution(resolutionWidthPixels, resolutionHeightPixels, requestUpsideDown, &resolutionScale);
+                return std::make_tuple(result, resolutionScale);
+            },
+            "Return a scale which most closely matches the given resolution.",
+            "resolutionWidthPixels"_a, "resolutionHeightPixels"_a, "requestUpsideDown"_a
+        )
+    ;
+
     py::class_<IBlackmagicRawPost3DLUT,IUnknown,std::unique_ptr<IBlackmagicRawPost3DLUT,Releaser>>(m, "IBlackmagicRawPost3DLUT")
         .def("GetName",
             [](IBlackmagicRawPost3DLUT& self) {
@@ -1243,6 +1273,7 @@ PYBIND11_MODULE(_pybraw, m) {
         )
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipEx)
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
+        DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipResolutions)
     ;
 
     py::class_<IBlackmagicRawConfiguration,IUnknown,std::unique_ptr<IBlackmagicRawConfiguration,Releaser>>(m, "IBlackmagicRawConfiguration")

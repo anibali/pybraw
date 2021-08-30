@@ -33,6 +33,11 @@ def configuration(codec):
 
 
 @pytest.fixture
+def constants(codec):
+    return verify(codec.as_IBlackmagicRawConstants())
+
+
+@pytest.fixture
 def clip(codec, sample_filename):
     return verify(codec.OpenClip(sample_filename))
 

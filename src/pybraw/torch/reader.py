@@ -6,7 +6,7 @@ import torch
 from pybraw import _pybraw, verify
 from pybraw.torch.buffer_manager import BufferManagerFlow1, BufferManagerFlow2
 from pybraw.torch.cuda import get_current_cuda_context
-from pybraw.torch.flow import TaskManager, ManualFlowCallback
+from pybraw.torch.flow import ReadTaskManager, ManualFlowCallback
 
 
 class FrameImageReader:
@@ -81,7 +81,7 @@ class FrameImageReader:
             raise NotImplementedError(f'Unsupported processing device: {self.processing_device}')
 
         clip_ex = verify(self.clip.as_IBlackmagicRawClipEx())
-        task_manager = TaskManager(buffer_manager_pool, clip_ex, pixel_format)
+        task_manager = ReadTaskManager(buffer_manager_pool, clip_ex, pixel_format)
         callback = ManualFlowCallback()
         verify(self.codec.SetCallback(callback))
 
@@ -92,7 +92,7 @@ class FrameImageReader:
         # Cancel running tasks.
         callback.cancel()
         # Consume completed tasks.
-        task_manager.consume_remaining_tasks()
+        task_manager.consume_remaining()
 
         self.codec.FlushJobs()
         verify(self.codec.SetCallback(None))

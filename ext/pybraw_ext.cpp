@@ -1062,7 +1062,15 @@ PYBIND11_MODULE(_pybraw, m) {
             },
             "Get the size of the resource in bytes."
         )
-        // TODO: Add missing bindings
+        .def("GetResourceContextAndCommandQueue",
+            [](IBlackmagicRawProcessedImage& self) {
+                void* context = nullptr;
+                void* commandQueue = nullptr;
+                HRESULT result = self.GetResourceContextAndCommandQueue(&context, &commandQueue);
+                return std::make_tuple(result, context, commandQueue);
+            },
+            "Get the context and command queue that the resource was created on."
+        )
     ;
 
     py::class_<IBlackmagicRawMetadataIterator,IUnknown,std::unique_ptr<IBlackmagicRawMetadataIterator,Releaser>>(m, "IBlackmagicRawMetadataIterator")

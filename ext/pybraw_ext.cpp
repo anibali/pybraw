@@ -508,9 +508,13 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::enum_<_BlackmagicRawResourceType>(m, "_BlackmagicRawResourceType")
+        // A block of CPU memory.
         .value("blackmagicRawResourceTypeBufferCPU", blackmagicRawResourceTypeBufferCPU)
+        // An MTLBuffer.
         .value("blackmagicRawResourceTypeBufferMetal", blackmagicRawResourceTypeBufferMetal)
+        // A CUdeviceptr.
         .value("blackmagicRawResourceTypeBufferCUDA", blackmagicRawResourceTypeBufferCUDA)
+        // A cl_mem.
         .value("blackmagicRawResourceTypeBufferOpenCL", blackmagicRawResourceTypeBufferOpenCL)
         .export_values()
     ;
@@ -537,9 +541,13 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::enum_<_BlackmagicRawPipeline>(m, "_BlackmagicRawPipeline")
+        // context: NULL, commandQueue: NULL
         .value("blackmagicRawPipelineCPU", blackmagicRawPipelineCPU)
+        // context: CUcontext, commandQueue: CUstream
         .value("blackmagicRawPipelineCUDA", blackmagicRawPipelineCUDA)
+        // context: NULL, commandQueue: MTLCommandQueue
         .value("blackmagicRawPipelineMetal", blackmagicRawPipelineMetal)
+        // context: cl_context, commandQueue: cl_command_queue
         .value("blackmagicRawPipelineOpenCL", blackmagicRawPipelineOpenCL)
         .export_values()
     ;

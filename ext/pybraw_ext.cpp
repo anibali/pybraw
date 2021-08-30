@@ -736,6 +736,10 @@ PYBIND11_MODULE(_pybraw, m) {
         )
     ;
 
+    py::class_<IBlackmagicRawClipAudio,IUnknown,std::unique_ptr<IBlackmagicRawClipAudio,Releaser>>(m, "IBlackmagicRawClipAudio")
+        // TODO: Add missing bindings.
+    ;
+
     py::class_<IBlackmagicRawClipResolutions,IUnknown,std::unique_ptr<IBlackmagicRawClipResolutions,Releaser>>(m, "IBlackmagicRawClipResolutions")
         .def("GetResolutionCount",
             [](IBlackmagicRawClipResolutions& self) {
@@ -1281,6 +1285,7 @@ PYBIND11_MODULE(_pybraw, m) {
             "clipProcessingAttributes"_a = nullptr, "frameProcessingAttributes"_a = nullptr
         )
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipEx)
+        DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipAudio)
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipProcessingAttributes)
         DEF_QUERY_INTERFACE(IBlackmagicRawClip, IBlackmagicRawClipResolutions)
     ;
@@ -1639,6 +1644,10 @@ PYBIND11_MODULE(_pybraw, m) {
         )
     ;
 
+    py::class_<IBlackmagicRawToneCurve,IUnknown,std::unique_ptr<IBlackmagicRawToneCurve,Releaser>>(m, "IBlackmagicRawToneCurve")
+        // TODO: Add missing bindings.
+    ;
+
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,Releaser>>(m, "IBlackmagicRaw")
         .def("OpenClip",
             [](IBlackmagicRaw& self, const char* fileName) {
@@ -1678,6 +1687,7 @@ PYBIND11_MODULE(_pybraw, m) {
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawConstants)
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawManualDecoderFlow1)
         DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawManualDecoderFlow2)
+        DEF_QUERY_INTERFACE(IBlackmagicRaw, IBlackmagicRawToneCurve)
     ;
 
     py::class_<IBlackmagicRawPipelineIterator,IUnknown,std::unique_ptr<IBlackmagicRawPipelineIterator,Releaser>>(m, "IBlackmagicRawPipelineIterator")

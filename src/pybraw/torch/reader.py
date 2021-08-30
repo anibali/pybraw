@@ -87,5 +87,12 @@ class FrameImageReader:
 
         yield task_manager
 
+        # Cancel pending tasks.
+        task_manager.clear_queue()
+        # Cancel running tasks.
+        callback.cancel()
+        # Consume completed tasks.
+        task_manager.consume_remaining_tasks()
+
         self.codec.FlushJobs()
         verify(self.codec.SetCallback(None))

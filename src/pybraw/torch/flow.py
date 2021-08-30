@@ -41,6 +41,15 @@ class Task:
         for callback in self._callbacks:
             callback(self, True)
 
+    def cancel(self):
+        """Cancel the task, making the task unsuccessful.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
+        self._future.cancel()
+        for callback in self._callbacks:
+            callback(self, False)
+
     def is_consumed(self):
         """Check whether this task has been consumed.
         """
@@ -61,22 +70,32 @@ class Task:
         finally:
             self.task_manager._end_task(self)
 
-    def is_complete(self):
+    def is_done(self) -> bool:
         """Check whether the result of this task is available.
+
+        Returns:
+            `True` if the task has been resolved, rejected, or cancelled.
         """
         if self.is_consumed():
             raise TaskConsumedError
         return self._future.done()
 
-    def on_complete(self, callback):
-        """Register a callback for when the task completes.
+    def is_cancelled(self) -> bool:
+        """Check whether the task has been cancelled.
+        """
+        if self.is_consumed():
+            raise TaskConsumedError
+        return self._future.cancelled()
+
+    def on_done(self, callback):
+        """Register a callback for when the task is resolved, rejected, or cancelled.
 
         The callback will be called with two arguments: the completed task, and a boolean
         indicating whether the task was successful.
         """
         if self.is_consumed():
             raise TaskConsumedError
-        if self.is_complete():
+        if self.is_done():
             exception = self._future.exception()
             if exception is None:
                 callback(self, True)
@@ -108,7 +127,7 @@ class TaskManager:
             with self._condition:
                 self._running_tasks.append(task)
                 self._condition.notify()
-            task.on_complete(self._on_task_complete)
+            task.on_done(self._on_task_complete)
 
         def __iter__(self):
             return self
@@ -183,6 +202,24 @@ class TaskManager:
             self._try_start_task()
         return task
 
+    def clear_queue(self):
+        """Remove all pending tasks from the queue.
+        """
+        with self._lock:
+            for task in list(self._queued_tasks):
+                task.cancel()
+            self._queued_tasks.clear()
+
+    def consume_remaining_tasks(self):
+        """Consume all tasks that have been started but not yet consumed.
+        """
+        with self._lock:
+            for task in list(self._unavailable_buffer_managers.keys()):
+                try:
+                    task.consume()
+                except:
+                    pass
+
     def _end_task(self, task):
         with self._lock:
             buffer_manager = self._unavailable_buffer_managers[task]
@@ -195,6 +232,12 @@ class TaskManager:
 class ManualFlowCallback(_pybraw.BlackmagicRawCallback):
     """Callbacks for the PyTorch manual decoding flows.
     """
+    def __init__(self):
+        super().__init__()
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
 
     def _format_result(self, result):
         return f'{ResultCode.to_hex(result)} "{ResultCode.to_string(result)}"'
@@ -202,6 +245,10 @@ class ManualFlowCallback(_pybraw.BlackmagicRawCallback):
     def ReadComplete(self, read_job, result, frame):
         user_data: UserData = verify(read_job.PopUserData())
         task = user_data.task
+
+        if self._cancelled:
+            task.cancel()
+            return
 
         if ResultCode.is_success(result):
             log.debug(f'Read frame index {task.frame_index}')
@@ -223,6 +270,10 @@ class ManualFlowCallback(_pybraw.BlackmagicRawCallback):
         user_data: UserData = verify(decode_job.PopUserData())
         task = user_data.task
 
+        if self._cancelled:
+            task.cancel()
+            return
+
         if ResultCode.is_success(result):
             log.debug(f'Decoded frame index {task.frame_index}')
         else:
@@ -238,6 +289,10 @@ class ManualFlowCallback(_pybraw.BlackmagicRawCallback):
     def ProcessComplete(self, process_job, result, processed_image):
         user_data: UserData = verify(process_job.PopUserData())
         task = user_data.task
+
+        if self._cancelled:
+            task.cancel()
+            return
 
         if ResultCode.is_success(result):
             log.debug(f'Processed frame index {task.frame_index}')

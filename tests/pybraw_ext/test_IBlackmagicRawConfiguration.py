@@ -43,4 +43,5 @@ def test_SetWriteMetadataPerFrame(configuration, write_per_frame):
 
 def test_SetFromDevice(configuration, cpu_device):
     verify(configuration.SetFromDevice(cpu_device))
-    # TODO: Use GetPipeline to check pipelines match.
+    actual = verify(configuration.GetPipeline())
+    assert actual == (_pybraw.blackmagicRawPipelineCPU, None, None)

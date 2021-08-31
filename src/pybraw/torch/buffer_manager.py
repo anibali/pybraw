@@ -101,7 +101,7 @@ class BufferManager(ABC):
         self,
         processed_image: _pybraw.IBlackmagicRawProcessedImage,
         resolution_scale: ResolutionScale,
-        device: Optional[torch.device] = None,
+        out_device: Optional[torch.device] = None,
         crop: Optional[Sequence[int]] = None,
         out_size: Optional[Sequence[int]] = None,
     ) -> torch.Tensor:
@@ -113,8 +113,8 @@ class BufferManager(ABC):
         Args:
             processed_image: The processed frame image.
             resolution_scale: The scale at which the frame was decoded.
-            device: The result will be stored in this device's memory. If not specified, the image
-                will be kept on the same device.
+            out_device: The result will be stored in this device's memory. If not specified, the
+                image will be kept on the same device.
             crop: An input region to crop (x, y, width, height). If not specified, the image will
                 not be cropped.
             out_size: The output image size (width, height). If not specified, the image will
@@ -180,8 +180,8 @@ class BufferManager(ABC):
                                            mode='bilinear', align_corners=False)[0]
 
         # Move the image tensor to the desired device.
-        if device is not None:
-            image_tensor = image_tensor.to(device)
+        if out_device is not None:
+            image_tensor = image_tensor.to(out_device)
 
         # Ensure that the returned image tensor is independent of the buffer manager.
         # This prevents us from overwriting the data with subsequent reads when the buffer manager

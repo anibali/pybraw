@@ -38,6 +38,11 @@ def constants(codec):
 
 
 @pytest.fixture
+def tone_curve(codec):
+    return verify(codec.as_IBlackmagicRawToneCurve())
+
+
+@pytest.fixture
 def clip(codec, sample_filename):
     return verify(codec.OpenClip(sample_filename))
 

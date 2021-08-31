@@ -1715,7 +1715,40 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawToneCurve,IUnknown,std::unique_ptr<IBlackmagicRawToneCurve,Releaser>>(m, "IBlackmagicRawToneCurve")
-        // TODO: Add missing bindings.
+        .def("GetToneCurve",
+            [](IBlackmagicRawToneCurve& self, const char* cameraType, const char* gamma, uint16_t gen) {
+                float contrast = 0;
+                float saturation = 0;
+                float midpoint = 0;
+                float highlights = 0;
+                float shadows = 0;
+                float blackLevel = 0;
+                float whiteLevel = 0;
+                uint16_t videoBlackLevel = 0;
+                HRESULT result = self.GetToneCurve(cameraType, gamma, gen, &contrast, &saturation, &midpoint, &highlights, &shadows, &blackLevel, &whiteLevel, &videoBlackLevel);
+                return std::make_tuple(result, contrast, saturation, midpoint, highlights, shadows, blackLevel, whiteLevel, videoBlackLevel);
+            },
+            "Query tone curve parameters for a specific camera and gamma.",
+            "cameraType"_a, "gamma"_a, "gen"_a
+        )
+        .def("EvaluateToneCurve",
+            [](IBlackmagicRawToneCurve& self, const char* cameraType, uint16_t gen, float contrast, float saturation, float midpoint, float highlights, float shadows, float blackLevel, float whiteLevel, uint16_t videoBlackLevel, py::buffer array) {
+                py::buffer_info info = array.request();
+                HRESULT result;
+                if(info.readonly) {
+                    // The buffer must be writable.
+                    result = E_INVALIDARG;
+                } else if(info.format == "f") {
+                    // The buffer must be of floats.
+                    result = E_INVALIDARG;
+                } else {
+                    result = self.EvaluateToneCurve(cameraType, gen, contrast, saturation, midpoint, highlights, shadows, blackLevel, whiteLevel, videoBlackLevel, static_cast<float*>(info.ptr), info.size);
+                }
+                return result;
+            },
+            "Query tone curve parameters for a specific camera and gamma.",
+            "cameraType"_a, "gen"_a, "contrast"_a, "saturation"_a, "midpoint"_a, "highlights"_a, "shadows"_a, "blackLevel"_a, "whiteLevel"_a, "videoBlackLevel"_a, "array"_a
+        )
     ;
 
     py::class_<IBlackmagicRaw,IUnknown,std::unique_ptr<IBlackmagicRaw,Releaser>>(m, "IBlackmagicRaw")

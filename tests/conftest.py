@@ -11,7 +11,10 @@ def test_data_dir():
 @pytest.fixture
 def sample_filename(test_data_dir):
     # Sample file is from: https://filmplusgear.com/blackmagic-raw-testfile-3
-    return os.path.join(test_data_dir, 'Filmplusgear-skiers-Samnaun-2019-dci-Q5.braw')
+    filename = os.path.join(test_data_dir, 'Filmplusgear-skiers-Samnaun-2019-dci-Q5.braw')
+    if os.path.isfile(filename):
+        return filename
+    pytest.skip(f'test data file not found: {filename}')
 
 
 @pytest.fixture

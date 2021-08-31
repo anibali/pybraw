@@ -3,8 +3,9 @@ from math import ceil
 from typing import Optional, Sequence
 
 import torch
-from pybraw import verify, _pybraw, PixelFormat, ResolutionScale
 from torch.nn.functional import interpolate
+
+from pybraw import verify, _pybraw, PixelFormat, ResolutionScale
 
 
 def _create_storage(pixel_type, device, size):
@@ -247,7 +248,7 @@ class BufferManagerFlow2(BufferManager):
         pixel_format: PixelFormat,
         context,
         command_queue,
-        processing_device: torch.device,
+        stream: torch.cuda.Stream,
     ):
         """Create a buffer manager for manual decoder flow 2 (GPU accelerated).
 
@@ -256,17 +257,15 @@ class BufferManagerFlow2(BufferManager):
             post_3d_lut_gpu: The post 3D LUT data, stored in CUDA memory.
             pixel_format: The desired pixel format of the output image.
             context: The CUDA context.
-            command_queue: The GPU command queue (this should be `None`).
-            processing_device: The processing device.
+            command_queue: The GPU command queue.
+            stream: The CUDA processing stream.
         """
         super().__init__(manual_decoder)
         self.context = context
         self.command_queue = command_queue
         self._post_3d_lut_gpu = post_3d_lut_gpu
-        if processing_device.type != 'cuda':
-            raise ValueError('The processing device must be a CUDA device')
-        self.processing_device = processing_device
-        with torch.cuda.device(self.processing_device):
+        self.stream = stream
+        with torch.cuda.stream(self.stream):
             self.decoded_buffer_gpu = torch.cuda.ByteStorage(0)
             self.working_buffer = torch.cuda.ByteStorage(0)
         self._pixel_format = pixel_format
@@ -276,7 +275,8 @@ class BufferManagerFlow2(BufferManager):
         return self.processed_buffer
 
     def replace_output_buffer(self):
-        self.processed_buffer = _create_storage(self._pixel_format.data_type(), self.processing_device, 0)
+        with torch.cuda.stream(self.stream):
+            self.processed_buffer = _create_storage(self._pixel_format.data_type(), 'cuda', 0)
 
     @property
     def post_3d_lut_gpu_resource(self):
@@ -301,16 +301,18 @@ class BufferManagerFlow2(BufferManager):
         if decoded_buffer_size_bytes > len(self.decoded_buffer):
             # Use pinned memory, which makes the CPU -> GPU decoded buffer transfer much faster.
             self.decoded_buffer = torch.ByteStorage(decoded_buffer_size_bytes, allocator=torch.cuda.memory._host_allocator())
-        self.decoded_buffer_gpu.resize_(decoded_buffer_size_bytes)
+        with torch.cuda.stream(self.stream):
+            self.decoded_buffer_gpu.resize_(decoded_buffer_size_bytes)
         decode_job = verify(self.manual_decoder.CreateJobDecode(self.frame_state_resource, self.bit_stream_resource, self.decoded_buffer_resource))
         return decode_job
 
     def create_process_job(self) -> _pybraw.IBlackmagicRawJob:
-        working_buffer_size_bytes = verify(self.manual_decoder.GetWorkingSizeBytes(self.frame_state_resource))
-        self.working_buffer.resize_(working_buffer_size_bytes)
-        processed_buffer_size_bytes = verify(self.manual_decoder.GetProcessedSizeBytes(self.frame_state_resource))
-        self.processed_buffer.resize_(ceil(processed_buffer_size_bytes / self.processed_buffer.element_size()))
-        self.decoded_buffer_gpu.copy_(self.decoded_buffer)
+        with torch.cuda.stream(self.stream):
+            self.decoded_buffer_gpu.copy_(self.decoded_buffer, non_blocking=True)
+            working_buffer_size_bytes = verify(self.manual_decoder.GetWorkingSizeBytes(self.frame_state_resource))
+            self.working_buffer.resize_(working_buffer_size_bytes)
+            processed_buffer_size_bytes = verify(self.manual_decoder.GetProcessedSizeBytes(self.frame_state_resource))
+            self.processed_buffer.resize_(ceil(processed_buffer_size_bytes / self.processed_buffer.element_size()))
         process_job = verify(self.manual_decoder.CreateJobProcess(
             self.context, self.command_queue, self.frame_state_resource,
             self.decoded_buffer_gpu_resource, self.working_buffer_resource,

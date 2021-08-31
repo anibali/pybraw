@@ -1,3 +1,4 @@
+import ctypes
 import os
 from contextlib import contextmanager
 
@@ -31,7 +32,13 @@ class FrameImageReader:
         if pipeline == _pybraw.blackmagicRawPipelineCUDA:
             with torch.cuda.device(self.processing_device):
                 self.context = get_current_cuda_context()
-            self.command_queue = None
+                # Create a new CUDA stream for decoding.
+                self.stream = torch.cuda.Stream()
+            stream_ptr = ctypes.cast(self.stream.cuda_stream, ctypes.c_void_p)
+            if stream_ptr:
+                self.command_queue = _pybraw.PointerCTypesToPyBind(stream_ptr)
+            else:
+                self.command_queue = None
             self.manual_decoder = verify(self.codec.as_IBlackmagicRawManualDecoderFlow2())
         else:
             self.context = None
@@ -69,7 +76,7 @@ class FrameImageReader:
 
         if self.processing_device.type == 'cuda':
             buffer_manager_pool = [
-                BufferManagerFlow2(self.manual_decoder, post_3d_lut_buffer, pixel_format, self.context, self.command_queue, self.processing_device)
+                BufferManagerFlow2(self.manual_decoder, post_3d_lut_buffer, pixel_format, self.context, self.command_queue, self.stream)
                 for _ in range(max_running_tasks)
             ]
         elif self.processing_device.type == 'cpu':

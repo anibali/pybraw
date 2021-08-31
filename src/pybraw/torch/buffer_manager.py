@@ -298,7 +298,9 @@ class BufferManagerFlow2(BufferManager):
 
     def create_decode_job(self) -> _pybraw.IBlackmagicRawJob:
         decoded_buffer_size_bytes = verify(self.manual_decoder.GetDecodedSizeBytes(self.frame_state_resource))
-        self.decoded_buffer.resize_(decoded_buffer_size_bytes)
+        if decoded_buffer_size_bytes > len(self.decoded_buffer):
+            # Use pinned memory, which makes the CPU -> GPU decoded buffer transfer much faster.
+            self.decoded_buffer = torch.ByteStorage(decoded_buffer_size_bytes, allocator=torch.cuda.memory._host_allocator())
         self.decoded_buffer_gpu.resize_(decoded_buffer_size_bytes)
         decode_job = verify(self.manual_decoder.CreateJobDecode(self.frame_state_resource, self.bit_stream_resource, self.decoded_buffer_resource))
         return decode_job

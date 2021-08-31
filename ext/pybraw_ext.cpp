@@ -560,6 +560,11 @@ PYBIND11_MODULE(_pybraw, m) {
         .export_values()
     ;
 
+    py::enum_<_BlackmagicRawAudioFormat>(m, "_BlackmagicRawAudioFormat")
+        .value("blackmagicRawAudioFormatPCMLittleEndian", blackmagicRawAudioFormatPCMLittleEndian)
+        .export_values()
+    ;
+
     py::enum_<_BlackmagicRawResolutionScale>(m, "_BlackmagicRawResolutionScale")
         .value("blackmagicRawResolutionScaleFull", blackmagicRawResolutionScaleFull)
         .value("blackmagicRawResolutionScaleHalf", blackmagicRawResolutionScaleHalf)
@@ -745,7 +750,64 @@ PYBIND11_MODULE(_pybraw, m) {
     ;
 
     py::class_<IBlackmagicRawClipAudio,IUnknown,std::unique_ptr<IBlackmagicRawClipAudio,Releaser>>(m, "IBlackmagicRawClipAudio")
-        // TODO: Add missing bindings.
+        .def("GetAudioFormat",
+            [](IBlackmagicRawClipAudio& self) {
+                BlackmagicRawAudioFormat format = 0;
+                HRESULT result = self.GetAudioFormat(&format);
+                return std::make_tuple(result, format);
+            },
+            "Get the format the audio was recorded in."
+        )
+        .def("GetAudioBitDepth",
+            [](IBlackmagicRawClipAudio& self) {
+                uint32_t bitDepth = 0;
+                HRESULT result = self.GetAudioBitDepth(&bitDepth);
+                return std::make_tuple(result, bitDepth);
+            },
+            "Get the audio bit depth."
+        )
+        .def("GetAudioChannelCount",
+            [](IBlackmagicRawClipAudio& self) {
+                uint32_t channelCount = 0;
+                HRESULT result = self.GetAudioChannelCount(&channelCount);
+                return std::make_tuple(result, channelCount);
+            },
+            "Get the audio channel count."
+        )
+        .def("GetAudioSampleRate",
+            [](IBlackmagicRawClipAudio& self) {
+                uint32_t sampleRate = 0;
+                HRESULT result = self.GetAudioSampleRate(&sampleRate);
+                return std::make_tuple(result, sampleRate);
+            },
+            "Get the audio sample rate."
+        )
+        .def("GetAudioSampleCount",
+            [](IBlackmagicRawClipAudio& self) {
+                uint64_t sampleCount = 0;
+                HRESULT result = self.GetAudioSampleCount(&sampleCount);
+                return std::make_tuple(result, sampleCount);
+            },
+            "Get the audio sample count."
+        )
+        .def("GetAudioSamples",
+            [](IBlackmagicRawClipAudio& self, int64_t sampleFrameIndex, py::buffer buffer, uint32_t maxSampleCount) {
+                uint32_t samplesRead = 0;
+                uint32_t bytesRead = 0;
+                py::buffer_info info = buffer.request();
+                uint32_t bufferSizeBytes = info.itemsize * info.size;
+                HRESULT result;
+                if(info.readonly) {
+                    // The buffer must be writable.
+                    result = E_INVALIDARG;
+                } else {
+                    result = self.GetAudioSamples(sampleFrameIndex, info.ptr, bufferSizeBytes, maxSampleCount, &samplesRead, &bytesRead);
+                }
+                return std::make_tuple(result, samplesRead, bytesRead);
+            },
+            "Get audio samples from the clip.",
+            "sampleFrameIndex"_a, "buffer"_a, "maxSampleCount"_a
+        )
     ;
 
     py::class_<IBlackmagicRawClipResolutions,IUnknown,std::unique_ptr<IBlackmagicRawClipResolutions,Releaser>>(m, "IBlackmagicRawClipResolutions")

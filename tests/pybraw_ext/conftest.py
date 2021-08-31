@@ -45,3 +45,8 @@ def clip(codec, sample_filename):
 @pytest.fixture
 def bw_clip(codec, bw_filename):
     return verify(codec.OpenClip(bw_filename))
+
+
+@pytest.fixture
+def audio(clip):
+    return verify(clip.as_IBlackmagicRawClipAudio())

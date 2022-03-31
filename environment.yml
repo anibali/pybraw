@@ -1,12 +1,16 @@
 name: pybraw
 dependencies:
-  - pip=21.2.2
-  - python=3.7.6
-  - pybind11=2.7.0
-  - numpy=1.20.3
-  - pillow=8.3.1
-  - termcolor=1.1.0
-  - pytest=6.2.4
+  - conda-forge::pip=22.0.4
+  - conda-forge::python=3.7.12
+  - conda-forge::numpy=1.21.5
+  - conda-forge::pillow=9.0.1
+  - conda-forge::termcolor=1.1.0
+  - conda-forge::pytest=7.1.1
   - conda-forge::pytest-lazy-fixture=0.6.3
-  - pytorch::pytorch=1.9.0
-  - nvidia::cudatoolkit=11.1
+  - conda-forge::pytorch=1.9.1=cuda112py37h3bec1eb_3
+  - conda-forge::cudatoolkit=11.2.2
+  - conda-forge::gxx=11.2.0
+  - conda-forge::gxx_linux-64=11.2.0
+  - conda-forge::pybind11=2.9.2
+  - conda-forge:libcxx=13.0.1
+  - conda-forge::libcxxabi==13.0.1

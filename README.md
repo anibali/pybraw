@@ -4,33 +4,27 @@ Python bindings for the Blackmagic RAW SDK.
 
 # Setup
 
-Install the following:
-
-```shell
-sudo apt install libc++1 libc++abi1
-```
-
-Download the [Blackmagic RAW 2.1 SDK](https://www.blackmagicdesign.com/au/developer/product/camera)
-and copy `libBlackmagicRawAPI.so` into your system library path. For example:
-
-```
-sudo cp libBlackmagicRawAPI.so /usr/lib/
-```
-
-You may also need other libraries depending on your requirements. For example, `libDecoderCUDA.so`
-is required for CUDA GPU decoding.
-
-Set up and activate a Conda environment with all required Python packages:
+Set up and activate a Conda environment with all required dependencies:
 
 ```shell
 conda env create -f environment.yml
 conda activate pybraw
 ```
 
+Download the [Blackmagic RAW 2.1 SDK for Linux](https://www.blackmagicdesign.com/support/download/ea11ce9660c642879612f363ca387c7f/Linux)
+and copy `libBlackmagicRawAPI.so` into your Conda environment's library path. For example:
+
+```
+sudo cp libBlackmagicRawAPI.so "$CONDA_PREFIX/lib/"
+```
+
+You may also need other libraries depending on your requirements. For example, `libDecoderCUDA.so`
+is required for CUDA GPU decoding.
+
 Install the pybraw package:
 
 ```shell
-pip install -U .
+pip install --no-build-isolation -U .
 ```
 
 ## PyTorch integration
